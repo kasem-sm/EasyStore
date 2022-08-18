@@ -4,11 +4,8 @@
  */
 package kasem.sm.easystore.processor.generator
 
-import com.google.devtools.ksp.processing.KSBuiltIns
-import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Modifier
-import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -16,49 +13,35 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.asClassName
 import com.squareup.kotlinpoet.ksp.toClassName
+import kasem.sm.easystore.processor.ksp.isEnumClass
 import kasem.sm.easystore.processor.ksp.toDataStoreKey
-import kasem.sm.easystore.processor.ksp.toKClass2
 import kotlinx.coroutines.flow.Flow
 
 internal class DsFunctionsGenerator {
 
     fun generateDSKeyProperty(
         functionParameterType: KSType,
-        resolverBuiltIns: KSBuiltIns,
-        preferenceKeyName: String,
-        functionParameterKClass: ClassName
+        preferenceKeyName: String
     ): PropertySpec {
         val preferenceKeyPropertyName = "${preferenceKeyName.uppercase()}_KEY"
 
-        val dataStoreKeyType = functionParameterType.toDataStoreKey(
-            resolverBuiltIns,
-            preferenceKeyName
-        ).parameterizedBy(functionParameterKClass)
+        val dataStoreKeyType = functionParameterType.toDataStoreKey().parameterizedBy(
+            if (functionParameterType.isEnumClass) {
+                String::class.asClassName()
+            } else functionParameterType.toClassName()
+        )
 
-        val codeBlock = when {
-            functionParameterType == resolverBuiltIns.intType -> """
-                     intPreferencesKey("$preferenceKeyName")
-            """.trimIndent()
-            functionParameterType == resolverBuiltIns.stringType -> """
-                     stringPreferencesKey("$preferenceKeyName")
-            """.trimIndent()
-            functionParameterType == resolverBuiltIns.doubleType -> """
-                    doublePreferencesKey("$preferenceKeyName")
-            """.trimIndent()
-            functionParameterType == resolverBuiltIns.booleanType -> """
-                    booleanPreferencesKey("$preferenceKeyName")
-            """.trimIndent()
-            functionParameterType == resolverBuiltIns.floatType -> """
-                        floatPreferencesKey("$preferenceKeyName")
-            """.trimIndent()
-            functionParameterType == resolverBuiltIns.longType -> """
-                        longPreferencesKey("$preferenceKeyName")
-            """.trimIndent()
-            functionParameterType.declaration.modifiers.first() == Modifier.ENUM -> """
-                     stringPreferencesKey("$preferenceKeyName")
-            """.trimIndent()
+        val codeBlock = when (functionParameterType.declaration.simpleName.asString()) {
+            Int::class.simpleName -> "intPreferencesKey(\"$preferenceKeyName\")"
+            String::class.simpleName -> "stringPreferencesKey(\"$preferenceKeyName\")"
+            Double::class.simpleName -> "doublePreferencesKey(\"$preferenceKeyName\")"
+            Boolean::class.simpleName -> "booleanPreferencesKey(\"$preferenceKeyName\")"
+            Float::class.simpleName -> "floatPreferencesKey(\"$preferenceKeyName\")"
+            Long::class.simpleName -> "longPreferencesKey(\"$preferenceKeyName\")"
             else -> {
-                throw UnknownError()
+                if (functionParameterType.declaration.modifiers.first() == Modifier.ENUM) {
+                    "stringPreferencesKey(\"$preferenceKeyName\")"
+                } else throw Exception()
             }
         }
 
@@ -72,20 +55,17 @@ internal class DsFunctionsGenerator {
     }
 
     fun generateDSAddFunction(
-        function: KSFunctionDeclaration,
-        preferenceKeyPropertyName: String,
-        resolverBuiltIns: KSBuiltIns
+        actualFunctionName: String,
+        actualFunctionParameterName: String?,
+        functionParamType: KSType,
+        preferenceKeyPropertyName: String
     ): FunSpec {
-        val functionParamType = function.parameters[0].type.resolve()
+        val isEnum = functionParamType.isEnumClass
 
-        val actualFunctionParameterName = function.parameters[0].name?.getShortName()
-        val actualFunctionType = functionParamType.toClassName()
-        val actualFunctionName = function.simpleName.asString()
         // Check if it's enum and not String::class
-        val afterElvis =
-            if (functionParamType.toKClass2(resolverBuiltIns)!! == Enum::class.asClassName()) {
-                "value.name"
-            } else "value"
+        val afterElvis = if (isEnum) {
+            (actualFunctionParameterName ?: "value") + ".name"
+        } else actualFunctionParameterName ?: "value"
 
         return FunSpec.builder(
             name = actualFunctionName
@@ -93,31 +73,32 @@ internal class DsFunctionsGenerator {
             addModifiers(KModifier.SUSPEND)
             addParameter(
                 name = actualFunctionParameterName ?: "value",
-                type = actualFunctionType
+                type = functionParamType.toClassName()
             )
             addCode(
                 CodeBlock.of(
                     """
-                            dataStore.edit { preferences ->
-                                preferences[$preferenceKeyPropertyName] = $afterElvis
-                            }
-                    """.trimIndent()
+                        dataStore.edit { preferences ->
+                            preferences[$preferenceKeyPropertyName] = $afterElvis
+                        }
+                    """
+                        .trimIndent()
                 )
             )
         }.build()
     }
 
     fun generateDSGetFunction(
-        functionParameterType: ClassName,
+        functionParameterType: KSType,
         functionName: String,
         preferenceKeyPropertyName: String,
-        parameterType: ClassName
+        actualFunctionParameter: KSType
     ): FunSpec {
-        val paramType = if (parameterType == Enum::class.asClassName()) {
-            functionParameterType
-        } else parameterType
+        val paramType = if (functionParameterType.isEnumClass) {
+            actualFunctionParameter.toClassName()
+        } else functionParameterType.toClassName()
 
-        val codeBlock = if (parameterType == Enum::class.asClassName()) {
+        val codeBlock = if (functionParameterType.isEnumClass) {
             """
                 return dataStore.data
                 .catch { exception ->

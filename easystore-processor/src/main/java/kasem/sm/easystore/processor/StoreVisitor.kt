@@ -5,7 +5,6 @@
 package kasem.sm.easystore.processor
 
 import com.google.devtools.ksp.processing.KSPLogger
-import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
@@ -17,20 +16,14 @@ import kasem.sm.easystore.processor.generator.DsFunctionsGenerator
 import kasem.sm.easystore.processor.generator.dsImportNameGenerator
 import kasem.sm.easystore.processor.ksp.checkIfReturnTypeExists
 import kasem.sm.easystore.processor.ksp.getStoreAnnotationArgs
-import kasem.sm.easystore.processor.ksp.toKClass
-import kasem.sm.easystore.processor.ksp.toKClass2
+import kasem.sm.easystore.processor.ksp.isEnumClass
+import kasem.sm.easystore.processor.ksp.supportedTypes
 import kasem.sm.easystore.processor.validators.validateFunctionNameAlreadyExistsOrNot
 import kasem.sm.easystore.processor.validators.validatePreferenceKeyIsUniqueOrNot
 import kasem.sm.easystore.processor.validators.validateStoreArgs
 
-internal data class Imports(
-    val packageName: String,
-    val names: List<String>
-)
-
 class StoreVisitor(
-    private val logger: KSPLogger,
-    private val resolver: Resolver
+    private val logger: KSPLogger
 ) : KSVisitorVoid() {
 
     internal lateinit var className: String
@@ -38,7 +31,7 @@ class StoreVisitor(
 
     internal val generatedFunctions = mutableListOf<FunSpec>()
     internal val generatedProperties = mutableListOf<PropertySpec>()
-    internal val generatedImports = mutableListOf<Imports>()
+    internal val generatedImportNames = mutableListOf<String>()
 
     private val generator = DsFunctionsGenerator()
 
@@ -97,34 +90,41 @@ class StoreVisitor(
 
         function.checkIfReturnTypeExists(logger)
 
-        val resolverBuiltIns = resolver.builtIns
         val functionParameterType = function.parameters[0].type.resolve()
 
-        val functionParameterKClass = functionParameterType.toKClass(resolverBuiltIns)
-        if (functionParameterKClass == null) {
+        val functionParameterKClass = functionParameterType.toClassName()
+
+        val showError = when {
+            supportedTypes.find { functionParameterKClass == it } != null -> false
+            functionParameterType.isEnumClass -> false
+            else -> true
+        }
+
+        if (showError) {
             logger.error("$functionName parameter type $functionParameterType is not supported by Datastore yet!")
             return
         }
 
-        functionParameterType.dsImportNameGenerator(resolverBuiltIns) { name ->
-            generatedImports.add(Imports("androidx.datastore.preferences.core", listOf(name)))
+        functionParameterType.dsImportNameGenerator { name ->
+            generatedImportNames.add(name)
         }
 
         generator
             .generateDSAddFunction(
-                function = function,
-                preferenceKeyPropertyName = preferenceKeyPropertyName,
-                resolverBuiltIns = resolverBuiltIns
+                actualFunctionName = functionName,
+                actualFunctionParameterName = function.parameters[0].name?.getShortName(),
+                functionParamType = functionParameterType,
+                preferenceKeyPropertyName = preferenceKeyPropertyName
             ).apply {
                 generatedFunctions.add(this)
             }
 
         generator
             .generateDSGetFunction(
-                functionParameterType = functionParameterType.toClassName(),
+                functionParameterType = functionParameterType,
                 functionName = getterFunctionName,
                 preferenceKeyPropertyName = preferenceKeyPropertyName,
-                parameterType = functionParameterType.toKClass2(resolverBuiltIns)!!
+                actualFunctionParameter = functionParameterType
             ).apply {
                 generatedFunctions.add(this)
             }
@@ -132,9 +132,7 @@ class StoreVisitor(
         generator
             .generateDSKeyProperty(
                 functionParameterType = functionParameterType,
-                resolverBuiltIns = resolverBuiltIns,
-                preferenceKeyName = preferenceKeyName,
-                functionParameterKClass = functionParameterKClass
+                preferenceKeyName = preferenceKeyName
             ).apply {
                 generatedProperties.add(this)
             }
