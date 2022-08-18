@@ -12,11 +12,13 @@ import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSVisitorVoid
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.ksp.toClassName
 import kasem.sm.easystore.processor.generator.DsFunctionsGenerator
 import kasem.sm.easystore.processor.generator.dsImportNameGenerator
 import kasem.sm.easystore.processor.ksp.checkIfReturnTypeExists
 import kasem.sm.easystore.processor.ksp.getStoreAnnotationArgs
 import kasem.sm.easystore.processor.ksp.toKClass
+import kasem.sm.easystore.processor.ksp.toKClass2
 import kasem.sm.easystore.processor.validators.validateFunctionNameAlreadyExistsOrNot
 import kasem.sm.easystore.processor.validators.validatePreferenceKeyIsUniqueOrNot
 import kasem.sm.easystore.processor.validators.validateStoreArgs
@@ -43,6 +45,7 @@ class StoreVisitor(
     override fun visitClassDeclaration(classDeclaration: KSClassDeclaration, data: Unit) {
         if (classDeclaration.classKind != ClassKind.INTERFACE) {
             logger.error("Only interface can be annotated with @EasyStore", classDeclaration)
+            return
         }
 
         packageName = classDeclaration.packageName.asString()
@@ -110,16 +113,18 @@ class StoreVisitor(
         generator
             .generateDSAddFunction(
                 function = function,
-                preferenceKeyPropertyName = preferenceKeyPropertyName
+                preferenceKeyPropertyName = preferenceKeyPropertyName,
+                resolverBuiltIns = resolverBuiltIns
             ).apply {
                 generatedFunctions.add(this)
             }
 
         generator
             .generateDSGetFunction(
+                functionParameterType = functionParameterType.toClassName(),
                 functionName = getterFunctionName,
                 preferenceKeyPropertyName = preferenceKeyPropertyName,
-                parameterType = functionParameterKClass
+                parameterType = functionParameterType.toKClass2(resolverBuiltIns)!!
             ).apply {
                 generatedFunctions.add(this)
             }

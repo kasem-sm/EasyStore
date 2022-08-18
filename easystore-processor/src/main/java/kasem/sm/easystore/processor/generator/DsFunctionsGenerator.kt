@@ -7,6 +7,7 @@ package kasem.sm.easystore.processor.generator
 import com.google.devtools.ksp.processing.KSBuiltIns
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.Modifier
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FunSpec
@@ -16,6 +17,7 @@ import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.asClassName
 import com.squareup.kotlinpoet.ksp.toClassName
 import kasem.sm.easystore.processor.ksp.toDataStoreKey
+import kasem.sm.easystore.processor.ksp.toKClass2
 import kotlinx.coroutines.flow.Flow
 
 internal class DsFunctionsGenerator {
@@ -33,26 +35,31 @@ internal class DsFunctionsGenerator {
             preferenceKeyName
         ).parameterizedBy(functionParameterKClass)
 
-        val codeBlock = when (functionParameterType) {
-            resolverBuiltIns.intType -> """
+        val codeBlock = when {
+            functionParameterType == resolverBuiltIns.intType -> """
                      intPreferencesKey("$preferenceKeyName")
             """.trimIndent()
-            resolverBuiltIns.stringType -> """
+            functionParameterType == resolverBuiltIns.stringType -> """
                      stringPreferencesKey("$preferenceKeyName")
             """.trimIndent()
-            resolverBuiltIns.doubleType -> """
+            functionParameterType == resolverBuiltIns.doubleType -> """
                     doublePreferencesKey("$preferenceKeyName")
             """.trimIndent()
-            resolverBuiltIns.booleanType -> """
+            functionParameterType == resolverBuiltIns.booleanType -> """
                     booleanPreferencesKey("$preferenceKeyName")
             """.trimIndent()
-            resolverBuiltIns.floatType -> """
+            functionParameterType == resolverBuiltIns.floatType -> """
                         floatPreferencesKey("$preferenceKeyName")
             """.trimIndent()
-            resolverBuiltIns.longType -> """
+            functionParameterType == resolverBuiltIns.longType -> """
                         longPreferencesKey("$preferenceKeyName")
             """.trimIndent()
-            else -> throw UnknownError()
+            functionParameterType.declaration.modifiers.first() == Modifier.ENUM -> """
+                     stringPreferencesKey("$preferenceKeyName")
+            """.trimIndent()
+            else -> {
+                throw UnknownError()
+            }
         }
 
         return PropertySpec.builder(
@@ -66,25 +73,33 @@ internal class DsFunctionsGenerator {
 
     fun generateDSAddFunction(
         function: KSFunctionDeclaration,
-        preferenceKeyPropertyName: String
+        preferenceKeyPropertyName: String,
+        resolverBuiltIns: KSBuiltIns
     ): FunSpec {
-        val actualFunctionParameter = function.parameters[0].name?.getShortName()
+        val functionParamType = function.parameters[0].type.resolve()
+
+        val actualFunctionParameterName = function.parameters[0].name?.getShortName()
+        val actualFunctionType = functionParamType.toClassName()
         val actualFunctionName = function.simpleName.asString()
-        val type = function.parameters[0].type.resolve().toClassName()
+        // Check if it's enum and not String::class
+        val afterElvis =
+            if (functionParamType.toKClass2(resolverBuiltIns)!! == Enum::class.asClassName()) {
+                "value.name"
+            } else "value"
 
         return FunSpec.builder(
             name = actualFunctionName
         ).apply {
             addModifiers(KModifier.SUSPEND)
             addParameter(
-                name = actualFunctionParameter ?: "value",
-                type = type
+                name = actualFunctionParameterName ?: "value",
+                type = actualFunctionType
             )
             addCode(
                 CodeBlock.of(
                     """
                             dataStore.edit { preferences ->
-                                preferences[$preferenceKeyPropertyName] = $actualFunctionParameter
+                                preferences[$preferenceKeyPropertyName] = $afterElvis
                             }
                     """.trimIndent()
                 )
@@ -93,11 +108,30 @@ internal class DsFunctionsGenerator {
     }
 
     fun generateDSGetFunction(
+        functionParameterType: ClassName,
         functionName: String,
         preferenceKeyPropertyName: String,
         parameterType: ClassName
     ): FunSpec {
-        val codeBlock = """
+        val paramType = if (parameterType == Enum::class.asClassName()) {
+            functionParameterType
+        } else parameterType
+
+        val codeBlock = if (parameterType == Enum::class.asClassName()) {
+            """
+                return dataStore.data
+                .catch { exception ->
+                    if (exception is IOException) {
+                        emit(emptyPreferences())
+                    } else {
+                        throw exception
+                    }
+                }.map { preference ->
+                    $paramType.valueOf(preference[$preferenceKeyPropertyName] ?: defaultValue.name)
+                }
+            """.trimIndent()
+        } else {
+            """
                 return dataStore.data
                 .catch { exception ->
                     if (exception is IOException) {
@@ -108,13 +142,14 @@ internal class DsFunctionsGenerator {
                 }.map { preference ->
                     preference[$preferenceKeyPropertyName] ?: defaultValue
                 }
-        """.trimIndent()
+            """.trimIndent()
+        }
 
         return FunSpec.builder(
             name = functionName
         ).apply {
-            addParameter("defaultValue", parameterType)
-            returns(Flow::class.asClassName().parameterizedBy(parameterType))
+            addParameter("defaultValue", paramType)
+            returns(Flow::class.asClassName().parameterizedBy(paramType))
             addCode(codeBlock)
         }.build()
     }

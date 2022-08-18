@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.devtools.ksp.processing.KSBuiltIns
 import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.Modifier
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.asClassName
 
@@ -26,7 +27,11 @@ internal fun KSType.toDataStoreKey(
         resolverBuiltIns.booleanType -> booleanPreferencesKey(preferenceKeyName)::class.asClassName()
         resolverBuiltIns.floatType -> floatPreferencesKey(preferenceKeyName)::class.asClassName()
         resolverBuiltIns.longType -> longPreferencesKey(preferenceKeyName)::class.asClassName()
-        else -> throw UnknownError()
+        else -> {
+            return if (declaration.modifiers.first() == Modifier.ENUM) {
+                stringPreferencesKey(preferenceKeyName)::class.asClassName()
+            } else throw UnknownError()
+        }
     }
 }
 
@@ -40,6 +45,28 @@ internal fun KSType.toKClass(
         resolverBuiltIns.booleanType -> Boolean::class.asClassName()
         resolverBuiltIns.floatType -> Float::class.asClassName()
         resolverBuiltIns.longType -> Long::class.asClassName()
-        else -> return null
+        else -> {
+            return if (declaration.modifiers.first() == Modifier.ENUM) {
+                String::class.asClassName()
+            } else null
+        }
+    }
+}
+
+internal fun KSType.toKClass2(
+    resolverBuiltIns: KSBuiltIns
+): ClassName? {
+    return when (this) {
+        resolverBuiltIns.intType -> Int::class.asClassName()
+        resolverBuiltIns.stringType -> String::class.asClassName()
+        resolverBuiltIns.doubleType -> Double::class.asClassName()
+        resolverBuiltIns.booleanType -> Boolean::class.asClassName()
+        resolverBuiltIns.floatType -> Float::class.asClassName()
+        resolverBuiltIns.longType -> Long::class.asClassName()
+        else -> {
+            return if (declaration.modifiers.first() == Modifier.ENUM) {
+                Enum::class.asClassName()
+            } else null
+        }
     }
 }
