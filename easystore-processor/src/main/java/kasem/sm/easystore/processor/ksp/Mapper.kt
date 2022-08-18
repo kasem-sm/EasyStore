@@ -10,36 +10,37 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.google.devtools.ksp.processing.KSBuiltIns
 import com.google.devtools.ksp.symbol.KSType
+import com.google.devtools.ksp.symbol.Modifier
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.asClassName
 
-internal fun KSType.toDataStoreKey(
-    resolverBuiltIns: KSBuiltIns,
-    preferenceKeyName: String
-): ClassName {
-    return when (this) {
-        resolverBuiltIns.intType -> intPreferencesKey(preferenceKeyName)::class.asClassName()
-        resolverBuiltIns.stringType -> stringPreferencesKey(preferenceKeyName)::class.asClassName()
-        resolverBuiltIns.doubleType -> doublePreferencesKey(preferenceKeyName)::class.asClassName()
-        resolverBuiltIns.booleanType -> booleanPreferencesKey(preferenceKeyName)::class.asClassName()
-        resolverBuiltIns.floatType -> floatPreferencesKey(preferenceKeyName)::class.asClassName()
-        resolverBuiltIns.longType -> longPreferencesKey(preferenceKeyName)::class.asClassName()
-        else -> throw UnknownError()
-    }
+internal fun KSType.toDataStoreKey(): ClassName {
+    return when (declaration.simpleName.asString()) {
+        Int::class.simpleName -> intPreferencesKey("")::class
+        String::class.simpleName -> stringPreferencesKey("")::class
+        Double::class.simpleName -> doublePreferencesKey("")::class
+        Boolean::class.simpleName -> booleanPreferencesKey("")::class
+        Float::class.simpleName -> floatPreferencesKey("")::class
+        Long::class.simpleName -> longPreferencesKey("")::class
+        else -> {
+            if (declaration.modifiers.first() == Modifier.ENUM) {
+                stringPreferencesKey("")::class
+            } else throw UnknownError()
+        }
+    }.asClassName()
 }
 
-internal fun KSType.toKClass(
-    resolverBuiltIns: KSBuiltIns
-): ClassName? {
-    return when (this) {
-        resolverBuiltIns.intType -> Int::class.asClassName()
-        resolverBuiltIns.stringType -> String::class.asClassName()
-        resolverBuiltIns.doubleType -> Double::class.asClassName()
-        resolverBuiltIns.booleanType -> Boolean::class.asClassName()
-        resolverBuiltIns.floatType -> Float::class.asClassName()
-        resolverBuiltIns.longType -> Long::class.asClassName()
-        else -> return null
-    }
+val supportedTypes = listOf(
+    Int::class,
+    String::class,
+    Double::class,
+    Boolean::class,
+    Float::class,
+    Long::class,
+    Enum::class
+).map {
+    it.asClassName()
 }
+
+internal val KSType.isEnumClass get() = declaration.modifiers.firstOrNull() == Modifier.ENUM

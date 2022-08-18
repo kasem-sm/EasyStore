@@ -13,7 +13,6 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asClassName
-import kasem.sm.easystore.processor.Imports
 import kasem.sm.easystore.processor.StoreVisitor
 
 internal class StoreFileGenerator(
@@ -21,7 +20,7 @@ internal class StoreFileGenerator(
 ) {
     private val packageName: String = visitor.packageName
     private val className: String = visitor.className
-    private val generatedImports: List<Imports> = visitor.generatedImports
+    private val generatedImports: List<String> = visitor.generatedImportNames
     private val generatedFunctions: List<FunSpec> = visitor.generatedFunctions
     private val generatedProperties: List<PropertySpec> = visitor.generatedProperties
 
@@ -37,7 +36,7 @@ internal class StoreFileGenerator(
             addNecessaryDataStoreImports()
             // Other optional imports
             generatedImports.forEach {
-                addImport(it.packageName, it.names)
+                addImport(packageName = "androidx.datastore.preferences.core", it)
             }
 
             addType(
