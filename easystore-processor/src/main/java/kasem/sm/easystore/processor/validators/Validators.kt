@@ -33,7 +33,7 @@ internal fun List<FunSpec>.validateFunctionNameAlreadyExistsOrNot(
     currentFunctionName: String,
     errorMessage: (String) -> Unit
 ) {
-    val spec = find {
+    val spec: FunSpec? = find {
         it.name == currentFunctionName
     }
     if (spec != null) {
@@ -46,13 +46,12 @@ internal fun List<PropertySpec>.validatePreferenceKeyIsUniqueOrNot(
     currentPropertyName: String,
     errorMessage: (String) -> Unit
 ) {
-    find {
+    val spec: PropertySpec? = find {
         it.name == currentPropertyName
-    }.apply {
-        if (this != null) {
-            errorMessage("preferenceKeyName is not unique. Every function that are annotated with @Store should have a unique key name.")
-            return
-        }
+    }
+    if (spec != null) {
+        errorMessage("preferenceKeyName is not unique. Every function that are annotated with @Store should have a unique key name.")
+        return
     }
 }
 

@@ -11,7 +11,6 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.devtools.ksp.symbol.KSType
-import com.google.devtools.ksp.symbol.Modifier
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.asClassName
 
@@ -24,7 +23,7 @@ internal fun KSType.toDataStoreKey(): ClassName {
         Float::class.simpleName -> floatPreferencesKey("")::class
         Long::class.simpleName -> longPreferencesKey("")::class
         else -> {
-            if (declaration.modifiers.first() == Modifier.ENUM) {
+            if (isEnumClass || isDataClass) {
                 stringPreferencesKey("")::class
             } else throw UnknownError()
         }
@@ -42,5 +41,3 @@ val supportedTypes = listOf(
 ).map {
     it.asClassName()
 }
-
-internal val KSType.isEnumClass get() = declaration.modifiers.firstOrNull() == Modifier.ENUM

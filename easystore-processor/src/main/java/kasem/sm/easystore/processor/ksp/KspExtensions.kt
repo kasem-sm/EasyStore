@@ -7,8 +7,12 @@
 package kasem.sm.easystore.processor.ksp
 
 import com.google.devtools.ksp.processing.KSPLogger
+import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
+import com.google.devtools.ksp.symbol.KSPropertyDeclaration
+import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSValueArgument
+import com.google.devtools.ksp.symbol.Modifier
 
 internal fun List<KSValueArgument>.getStoreAnnotationArgs(): Pair<String, String> {
     return Pair(get(0).value as String, get(1).value as String)
@@ -26,3 +30,15 @@ internal fun KSFunctionDeclaration.checkIfReturnTypeExists(logger: KSPLogger) {
         return
     }
 }
+
+fun KSType.getAllProperties(): List<KSPropertyDeclaration> {
+    if (isDataClass) {
+        val dataClass: KSClassDeclaration = declaration as KSClassDeclaration
+        return dataClass.getAllProperties().toList()
+    }
+    return emptyList()
+}
+
+internal val KSType.isEnumClass get() = declaration.modifiers.firstOrNull() == Modifier.ENUM
+
+internal val KSType.isDataClass get() = declaration.modifiers.firstOrNull() == Modifier.DATA
