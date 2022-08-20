@@ -5,7 +5,6 @@
 package kasem.sm.easystore.processor.generator
 
 import com.google.devtools.ksp.symbol.KSType
-import com.google.devtools.ksp.symbol.Modifier
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -17,52 +16,37 @@ import kasem.sm.easystore.processor.ksp.getAllProperties
 import kasem.sm.easystore.processor.ksp.isDataClass
 import kasem.sm.easystore.processor.ksp.isEnumClass
 import kasem.sm.easystore.processor.ksp.toDataStoreKey
+import kasem.sm.easystore.processor.ksp.toPreferenceKeyCode
 import kotlinx.coroutines.flow.Flow
 
 internal class DsFunctionsGenerator {
 
     fun generateDSKeyProperty(
+        preferenceKeyType: List<KSType>,
+        preferenceKeyName: List<String>
+    ): List<PropertySpec> {
+        return preferenceKeyType.zip(preferenceKeyName).map { (type, keyName) ->
+            val preferenceKeyPropertyName = "${keyName.uppercase()}_KEY"
+
+            buildPropertyType(
+                ksType = type,
+                preferenceKeyName = keyName,
+                propertyName = preferenceKeyPropertyName
+            )
+        }
+    }
+
+    fun generateDSKeyProperty(
         functionParameterType: KSType,
-        preferenceKeyName: String,
-        preferenceKeyType: KSType?
+        preferenceKeyName: String
     ): PropertySpec {
         val preferenceKeyPropertyName = "${preferenceKeyName.uppercase()}_KEY"
 
-        val dataStoreKeyType = if (functionParameterType.isDataClass) {
-            preferenceKeyType!!.toDataStoreKey().parameterizedBy(preferenceKeyType.toClassName())
-        } else functionParameterType.toDataStoreKey().parameterizedBy(
-            if (functionParameterType.isEnumClass) {
-                String::class.asClassName()
-            } else functionParameterType.toClassName()
+        return buildPropertyType(
+            ksType = functionParameterType,
+            preferenceKeyName = preferenceKeyName,
+            propertyName = preferenceKeyPropertyName
         )
-
-        fun String.toPreferenceKeyCode(): String {
-            return when (this) {
-                Int::class.simpleName -> "intPreferencesKey(\"$preferenceKeyName\")"
-                String::class.simpleName -> "stringPreferencesKey(\"$preferenceKeyName\")"
-                Double::class.simpleName -> "doublePreferencesKey(\"$preferenceKeyName\")"
-                Boolean::class.simpleName -> "booleanPreferencesKey(\"$preferenceKeyName\")"
-                Float::class.simpleName -> "floatPreferencesKey(\"$preferenceKeyName\")"
-                Long::class.simpleName -> "longPreferencesKey(\"$preferenceKeyName\")"
-                else -> {
-                    if (functionParameterType.isEnumClass) {
-                        "stringPreferencesKey(\"$preferenceKeyName\")"
-                    } else throw Exception()
-                }
-            }
-        }
-
-        val codeBlock = if (functionParameterType.isDataClass) {
-            preferenceKeyType!!.declaration.simpleName.asString().toPreferenceKeyCode()
-        } else functionParameterType.declaration.simpleName.asString().toPreferenceKeyCode()
-
-        return PropertySpec.builder(
-            name = preferenceKeyPropertyName,
-            type = dataStoreKeyType
-        ).apply {
-            addModifiers(KModifier.PRIVATE)
-            initializer(CodeBlock.of(codeBlock))
-        }.build()
     }
 
     fun generateDSAddFunction(
@@ -71,12 +55,31 @@ internal class DsFunctionsGenerator {
         functionParamType: KSType,
         preferenceKeyPropertyName: List<String>
     ): FunSpec {
-        val isEnum = functionParamType.declaration.modifiers.firstOrNull() == Modifier.ENUM
+        val isEnum = functionParamType.isEnumClass
+        val isDataClass = functionParamType.isDataClass
 
         // Check if it's enum and not String::class
         val afterElvis = if (isEnum) {
             (actualFunctionParameterName ?: "value") + ".name"
         } else actualFunctionParameterName ?: "value"
+
+        val editBlock = if (isDataClass) {
+            var addBlock = ""
+            functionParamType.getAllProperties().zip(preferenceKeyPropertyName).forEach {
+                val type = it.first.type.resolve()
+                val afterInnerElvis = if (type.isEnumClass) {
+                    "$actualFunctionParameterName.${it.first.simpleName.asString()}.name\n"
+                } else "$actualFunctionParameterName.${it.first.simpleName.asString()}\n"
+                addBlock += "preferences[${it.second}] ?: $afterInnerElvis"
+            }
+            addBlock
+        } else "preferences[${preferenceKeyPropertyName[0]}] = $afterElvis"
+
+        val codeBlock = """ 
+                    |dataStore.edit { preferences ->
+                    |    $editBlock
+                    |}
+        """.trimMargin()
 
         return FunSpec.builder(
             name = actualFunctionName
@@ -86,20 +89,7 @@ internal class DsFunctionsGenerator {
                 name = actualFunctionParameterName ?: "value",
                 type = functionParamType.toClassName()
             )
-            if (preferenceKeyPropertyName.size == 1) {
-                addCode(
-                    """ |dataStore.edit { preferences ->
-                    |    preferences[${preferenceKeyPropertyName[0]}] = $afterElvis
-                    |}
-                    """.trimMargin()
-                )
-            } else {
-                addCode(
-                    """
-                    // Data Class
-                    """.trimIndent()
-                )
-            }
+            addCode(CodeBlock.of(codeBlock))
         }.build()
     }
 
@@ -108,42 +98,24 @@ internal class DsFunctionsGenerator {
         functionName: String,
         preferenceKeyPropertyName: List<String>
     ): FunSpec {
-        val paramType = if (functionParameterType.isEnumClass) {
-            functionParameterType.toClassName()
-        } else functionParameterType.toClassName()
+        val paramType = functionParameterType.toClassName()
 
-        val codeBlock = if (preferenceKeyPropertyName.size == 1) {
+        val mapBlock = if (!functionParameterType.isDataClass) {
             if (functionParameterType.isEnumClass) {
-                """ |return dataStore.data
-                |.catch { exception ->
-                |    if (exception is IOException) {
-                |        emit(emptyPreferences())
-                |    } else {
-                |        throw exception
-                |    }
-                |}.map { preference ->
-                |    $paramType.valueOf(preference[${preferenceKeyPropertyName[0]}] ?: defaultValue.name)
-                |}
-                """.trimMargin()
-            } else {
-                """ |return dataStore.data
-                |.catch { exception ->
-                |    if (exception is IOException) {
-                |        emit(emptyPreferences())
-                |    } else {
-                |        throw exception
-                |    }
-                |}.map { preference ->
-                |    preference[${preferenceKeyPropertyName[0]}] ?: defaultValue
-                |}
-                """.trimMargin()
-            }
+                "$paramType.valueOf(preference[${preferenceKeyPropertyName[0]}] ?: defaultValue.name)"
+            } else "preference[${preferenceKeyPropertyName[0]}] ?: defaultValue"
         } else {
             var codeBlock = ""
             functionParameterType.getAllProperties().zip(preferenceKeyPropertyName).forEach {
-                codeBlock += "preference[${it.second}] ?: defaultValue.${it.first.simpleName.asString()},\n"
+                val type = it.first.type.resolve()
+                codeBlock += if (type.isEnumClass) {
+                    "${type.toClassName()}.valueOf(preference[${preferenceKeyPropertyName[0]}] ?: defaultValue.${it.first.simpleName.asString()}.name),\n"
+                } else "preference[${it.second}] ?: defaultValue.${it.first.simpleName.asString()},\n"
             }
+            "$paramType($codeBlock)"
+        }
 
+        val codeBlock =
             """ |return dataStore.data
                 |.catch { exception ->
                 |    if (exception is IOException) {
@@ -152,10 +124,9 @@ internal class DsFunctionsGenerator {
                 |        throw exception
                 |    }
                 |}.map { preference ->
-                |   $paramType($codeBlock)
+                |    $mapBlock
                 |}
             """.trimMargin()
-        }
 
         return FunSpec.builder(
             name = functionName
@@ -164,5 +135,33 @@ internal class DsFunctionsGenerator {
             returns(Flow::class.asClassName().parameterizedBy(paramType))
             addCode(codeBlock)
         }.build()
+    }
+
+    companion object {
+        private fun buildPropertyType(
+            ksType: KSType,
+            preferenceKeyName: String,
+            propertyName: String
+        ): PropertySpec {
+            val dataStoreKeyType = ksType.toDataStoreKey().parameterizedBy(
+                if (ksType.isEnumClass) {
+                    String::class.asClassName()
+                } else ksType.toClassName()
+            )
+
+            val codeBlock = ksType.declaration.simpleName.asString()
+                .toPreferenceKeyCode(
+                    preferenceKeyName = preferenceKeyName,
+                    isEnum = ksType.isEnumClass
+                )
+
+            return PropertySpec.builder(
+                name = propertyName,
+                type = dataStoreKeyType
+            ).apply {
+                addModifiers(KModifier.PRIVATE)
+                initializer(CodeBlock.of(codeBlock))
+            }.build()
+        }
     }
 }

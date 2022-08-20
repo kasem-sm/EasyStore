@@ -30,7 +30,7 @@ internal fun KSType.toDataStoreKey(): ClassName {
     }.asClassName()
 }
 
-val supportedTypes = listOf(
+internal val supportedTypes = listOf(
     Int::class,
     String::class,
     Double::class,
@@ -40,4 +40,20 @@ val supportedTypes = listOf(
     Enum::class
 ).map {
     it.asClassName()
+}
+
+internal fun String.toPreferenceKeyCode(preferenceKeyName: String, isEnum: Boolean): String {
+    return when (this) {
+        Int::class.simpleName -> "intPreferencesKey(\"$preferenceKeyName\")"
+        String::class.simpleName -> "stringPreferencesKey(\"$preferenceKeyName\")"
+        Double::class.simpleName -> "doublePreferencesKey(\"$preferenceKeyName\")"
+        Boolean::class.simpleName -> "booleanPreferencesKey(\"$preferenceKeyName\")"
+        Float::class.simpleName -> "floatPreferencesKey(\"$preferenceKeyName\")"
+        Long::class.simpleName -> "longPreferencesKey(\"$preferenceKeyName\")"
+        else -> {
+            if (isEnum) {
+                "stringPreferencesKey(\"$preferenceKeyName\")"
+            } else throw Exception()
+        }
+    }
 }

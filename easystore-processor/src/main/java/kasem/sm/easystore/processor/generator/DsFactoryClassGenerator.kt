@@ -86,7 +86,7 @@ internal class DsFactoryClassGenerator(
         }
 
         if (showError) {
-            logger.error("$functionName parameter type $functionParameterType is not supported by Datastore yet!")
+            logger.error("Function $functionName parameter type $functionParameterType is not supported by Datastore yet!")
             return null
         }
 
@@ -124,27 +124,21 @@ internal class DsFactoryClassGenerator(
             }
 
         if (functionParameterType.isDataClass) {
-            preferenceKeyType.zip(preferenceKeyName).forEach { (type, keyName) ->
-                generator
-                    .generateDSKeyProperty(
-                        functionParameterType = functionParameterType,
-                        preferenceKeyName = keyName,
-                        preferenceKeyType = type
-                    ).apply {
-                        generatedProperties.add(this)
-                    }
-            }
+            generator
+                .generateDSKeyProperty(
+                    preferenceKeyType = preferenceKeyType,
+                    preferenceKeyName = preferenceKeyName
+                ).onEach {
+                    generatedProperties.add(it)
+                }
         } else {
-            preferenceKeyName.forEach {
-                generator
-                    .generateDSKeyProperty(
-                        functionParameterType = functionParameterType,
-                        preferenceKeyName = it,
-                        preferenceKeyType = null
-                    ).apply {
-                        generatedProperties.add(this)
-                    }
-            }
+            generator
+                .generateDSKeyProperty(
+                    functionParameterType = functionParameterType,
+                    preferenceKeyName = preferenceKeyName[0]
+                ).apply {
+                    generatedProperties.add(this)
+                }
         }
 
         return Triple(generatedFunctions, generatedProperties, generatedImportNames)

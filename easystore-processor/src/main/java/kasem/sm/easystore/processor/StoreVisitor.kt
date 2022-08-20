@@ -7,14 +7,18 @@ package kasem.sm.easystore.processor
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSVisitorVoid
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.ksp.toClassName
 import kasem.sm.easystore.core.Link
 import kasem.sm.easystore.core.Store
 import kasem.sm.easystore.processor.generator.DsFactoryClassGenerator
 import kasem.sm.easystore.processor.ksp.getStoreAnnotationArgs
 import kasem.sm.easystore.processor.ksp.isDataClass
+import kasem.sm.easystore.processor.ksp.isEnumClass
+import kasem.sm.easystore.processor.ksp.supportedTypes
 
 class StoreVisitor(
     private val logger: KSPLogger
@@ -56,50 +60,94 @@ class StoreVisitor(
                 }
         }
 
-//        var kClass: ClassName
         functions.filter {
             it.annotations.firstOrNull()?.shortName?.asString() == Link::class.simpleName
         }.forEach {
-//            val functionArgs = it.annotations.toList()[0].arguments.firstOrNull() ?: return
-//            kClass = (functionArgs.value as KSType)::class.asClassName()
+            val functionArgs = it.annotations.toList()[0].arguments.firstOrNull() ?: return
 
             val parameter = it.parameters[0].type.resolve()
-//            if (parameter::class.asClassName() == kClass) {
-            if (parameter.isDataClass) {
-                val dataClass: KSClassDeclaration = parameter.declaration as KSClassDeclaration
-                val annotation = dataClass.annotations.firstOrNull()
+            if (parameter.toClassName().simpleName == (functionArgs.value as KSType).toClassName().simpleName) {
+                val showError = when {
+                    supportedTypes.find { type -> parameter.toClassName() == type } != null -> false
+                    parameter.isEnumClass -> false
+                    parameter.isDataClass -> false
+                    else -> true
+                }
 
-                if (annotation?.shortName?.asString() == Store::class.simpleName) {
-                    val annotationArguments = annotation?.arguments ?: return
-                    val (preferenceKeyName, getterFunctionName) = annotationArguments.getStoreAnnotationArgs()
+                if (showError) {
+                    logger.error("Function ${it.simpleName.asString()} parameter type $parameter is not supported by Datastore yet!")
+                    return
+                }
 
-                    val factoryClassGenerator = DsFactoryClassGenerator(it, logger)
+                if (parameter.isDataClass) {
+                    val dataClass: KSClassDeclaration = parameter.declaration as KSClassDeclaration
+                    val annotation = dataClass.annotations.filter { ks ->
+                        ks.shortName.asString() == Store::class.simpleName
+                    }.firstOrNull()
 
-                    val preferenceKeysFromDataClass =
-                        dataClass.getAllProperties().toList().map { property ->
-                            preferenceKeyName + "_" + property.simpleName.asString()
+                    if (annotation != null) {
+                        if (annotation.shortName.asString() == Store::class.simpleName) {
+                            val annotationArguments = annotation.arguments
+                            val (preferenceKeyName, getterFunctionName) = annotationArguments.getStoreAnnotationArgs()
+
+                            val factoryClassGenerator = DsFactoryClassGenerator(it, logger)
+
+                            val unSupportedParamName = mutableListOf<String>()
+
+                            val areDataClassPropertiesSupported =
+                                dataClass.getAllProperties().toList()
+                                    .map { property ->
+                                        val toClass = property.type.resolve()
+                                        Pair(
+                                            supportedTypes.find { type -> toClass.toClassName() == type } != null || toClass.isEnumClass,
+                                            property.simpleName.asString()
+                                        )
+                                    }.also { list ->
+                                        list.filter { (b, _) ->
+                                            !b
+                                        }.forEach { (_, s) ->
+                                            unSupportedParamName.add(s)
+                                        }
+                                    }
+
+                            if (areDataClassPropertiesSupported.any { (b, _) -> !b }) {
+                                logger.error("$unSupportedParamName parameter(s) of the class linked to the function ${it.simpleName.asString()} are not supported by Datastore yet!")
+                                return
+                            }
+
+                            val preferenceKeysFromDataClass =
+                                dataClass.getAllProperties().toList().map { property ->
+                                    preferenceKeyName + "_" + property.simpleName.asString()
+                                }
+
+                            val preferenceKeyTypeFromDataClass =
+                                dataClass.getAllProperties().toList().map { property ->
+                                    property.type.resolve()
+                                }
+
+                            val returns = factoryClassGenerator.initiate(
+                                preferenceKeyName = preferenceKeysFromDataClass,
+                                getterFunctionName = getterFunctionName,
+                                preferenceKeyType = preferenceKeyTypeFromDataClass
+                            )
+
+                            if (returns != null) {
+                                generatedFunctions.addAll(returns.first)
+                                generatedProperties.addAll(returns.second)
+                                generatedImportNames.addAll(returns.third)
+                            } else {
+                                logger.error("Factory returned null values")
+                                return
+                            }
                         }
-
-                    val preferenceKeyTypeFromDataClass =
-                        dataClass.getAllProperties().toList().map { property ->
-                            property.type.resolve()
-                        }
-
-                    val returns = factoryClassGenerator.initiate(
-                        preferenceKeyName = preferenceKeysFromDataClass,
-                        getterFunctionName = getterFunctionName,
-                        preferenceKeyType = preferenceKeyTypeFromDataClass
-                    )
-
-                    if (returns != null) {
-                        generatedFunctions.addAll(returns.first)
-                        generatedProperties.addAll(returns.second)
-                        generatedImportNames.addAll(returns.third)
                     } else {
-                        logger.error("Factory returned null values")
+                        logger.error("The class linked inside @Link should be annotated with @Store")
                         return
                     }
                 }
+            } else {
+                logger.error("The function parameter type and the class linked with @Link are not of the same type.")
+                return
             }
         }
     }
