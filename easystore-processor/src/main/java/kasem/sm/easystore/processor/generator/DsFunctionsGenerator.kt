@@ -26,12 +26,10 @@ internal class DsFunctionsGenerator {
         preferenceKeyName: List<String>
     ): List<PropertySpec> {
         return preferenceKeyType.zip(preferenceKeyName).map { (type, keyName) ->
-            val preferenceKeyPropertyName = "${keyName.uppercase()}_KEY"
-
             buildPropertyType(
                 ksType = type,
                 preferenceKeyName = keyName,
-                propertyName = preferenceKeyPropertyName
+                propertyName = keyName.uppercase()
             )
         }
     }
@@ -50,26 +48,26 @@ internal class DsFunctionsGenerator {
     }
 
     fun generateDSAddFunction(
-        actualFunctionName: String,
-        actualFunctionParameterName: String?,
+        functionName: String,
         functionParamType: KSType,
-        preferenceKeyPropertyName: List<String>
+        preferenceKeyPropertyName: List<String>,
+        functionParameterName: String
     ): FunSpec {
         val isEnum = functionParamType.isEnumClass
         val isDataClass = functionParamType.isDataClass
 
         // Check if it's enum and not String::class
         val afterElvis = if (isEnum) {
-            (actualFunctionParameterName ?: "value") + ".name"
-        } else actualFunctionParameterName ?: "value"
+            "$functionParameterName.name"
+        } else functionParameterName
 
         val editBlock = if (isDataClass) {
             var addBlock = ""
             functionParamType.getAllProperties().zip(preferenceKeyPropertyName).forEach {
                 val type = it.first.type.resolve()
                 val afterInnerElvis = if (type.isEnumClass) {
-                    "$actualFunctionParameterName.${it.first.simpleName.asString()}.name\n"
-                } else "$actualFunctionParameterName.${it.first.simpleName.asString()}\n"
+                    "$functionParameterName.${it.first.simpleName.asString()}.name\n"
+                } else "$functionParameterName.${it.first.simpleName.asString()}\n"
                 addBlock += "preferences[${it.second}] ?: $afterInnerElvis"
             }
             addBlock
@@ -82,11 +80,12 @@ internal class DsFunctionsGenerator {
         """.trimMargin()
 
         return FunSpec.builder(
-            name = actualFunctionName
+            name = functionName
         ).apply {
+            addModifiers(KModifier.OVERRIDE)
             addModifiers(KModifier.SUSPEND)
             addParameter(
-                name = actualFunctionParameterName ?: "value",
+                name = functionParameterName,
                 type = functionParamType.toClassName()
             )
             addCode(CodeBlock.of(codeBlock))
@@ -131,6 +130,7 @@ internal class DsFunctionsGenerator {
         return FunSpec.builder(
             name = functionName
         ).apply {
+            addModifiers(KModifier.OVERRIDE)
             addParameter("defaultValue", paramType)
             returns(Flow::class.asClassName().parameterizedBy(paramType))
             addCode(codeBlock)

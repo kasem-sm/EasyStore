@@ -16,3 +16,7 @@ rootProject.name = "EasyStore"
 include ':sample'
 include ':easystore-core'
 include ':easystore-processor'
+
+//v2 test
+include ':easystore-core'
+include ':easystore-processor'

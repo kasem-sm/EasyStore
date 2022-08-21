@@ -6,4 +6,4 @@ package kasem.sm.easystore.core
 
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.SOURCE)
-annotation class EasyStore()
+annotation class EasyStore

@@ -4,18 +4,21 @@
  */
 package kasem.sm.easystore.processor
 
+import com.google.devtools.ksp.innerArguments
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSClassDeclaration
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSVisitorVoid
+import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.ksp.toClassName
-import kasem.sm.easystore.core.Link
+import kasem.sm.easystore.core.Retrieve
 import kasem.sm.easystore.core.Store
 import kasem.sm.easystore.processor.generator.DsFactoryClassGenerator
-import kasem.sm.easystore.processor.ksp.getStoreAnnotationArgs
+import kasem.sm.easystore.processor.ksp.checkIfReturnTypeExists
 import kasem.sm.easystore.processor.ksp.isDataClass
 import kasem.sm.easystore.processor.ksp.isEnumClass
 import kasem.sm.easystore.processor.ksp.supportedTypes
@@ -24,12 +27,13 @@ class StoreVisitor(
     private val logger: KSPLogger
 ) : KSVisitorVoid() {
 
-    internal lateinit var className: String
+    internal lateinit var className: ClassName
     internal lateinit var packageName: String
+    private val factoryClassGenerator = DsFactoryClassGenerator(logger)
 
-    internal val generatedFunctions = mutableListOf<FunSpec>()
-    internal val generatedProperties = mutableListOf<PropertySpec>()
-    internal val generatedImportNames = mutableListOf<String>()
+    internal var generatedFunctions = listOf<FunSpec>()
+    internal var generatedProperties = listOf<PropertySpec>()
+    internal var generatedImportNames = listOf<String>()
 
     override fun visitClassDeclaration(classDeclaration: KSClassDeclaration, data: Unit) {
         if (classDeclaration.classKind != ClassKind.INTERFACE) {
@@ -38,117 +42,181 @@ class StoreVisitor(
         }
 
         packageName = classDeclaration.packageName.asString()
-        className = "${classDeclaration.simpleName.asString()}Factory"
+        className = classDeclaration.toClassName()
 
         val functions = classDeclaration.getAllFunctions().toList()
 
-        // Separate Store and Map annotated functions
-        functions.filter {
-            it.annotations.firstOrNull()?.shortName?.asString() == Store::class.simpleName
-        }.forEach {
-            val annotationArguments = it.annotations.firstOrNull()?.arguments ?: return
-            val (preferenceKeyName, getterFunctionName) = annotationArguments.getStoreAnnotationArgs()
+        functions
+            .filter {
+                it.annotations.firstOrNull()?.shortName?.asString() == Store::class.simpleName
+            }.forEach {
+                visitFunctionDeclaration(it, Unit)
+            }
 
-            DsFactoryClassGenerator(it, logger)
-                .initiate(listOf(preferenceKeyName), emptyList(), getterFunctionName)
-                .also { triple ->
-                    triple?.let {
-                        generatedFunctions.addAll(it.first)
-                        generatedProperties.addAll(it.second)
-                        generatedImportNames.addAll(it.third)
-                    }
+        functions
+            .filter {
+                it.annotations.firstOrNull()?.shortName?.asString() == Retrieve::class.simpleName
+            }.forEach {
+                visitFunctionDeclaration(it, Unit)
+            }
+    }
+
+    override fun visitFunctionDeclaration(function: KSFunctionDeclaration, data: Unit) {
+        val functionName = function.simpleName.asString()
+        val functionAnnotation = function.annotations
+        val functionParameters = function.parameters
+        val functionParameter = functionParameters.firstOrNull()
+        val functionReturnType = function.returnType?.resolve()
+        val functionAnnotationName = functionAnnotation.firstOrNull()?.shortName?.asString()
+
+        if (functionAnnotationName == Store::class.simpleName) {
+            val prefKeyName = functionAnnotation.first().arguments[0].value as String
+            if (functionParameter == null) {
+                logger.error(
+                    "Functions annotated with @Store should have at least one parameter. " +
+                            "The function, $functionName doesn't have any."
+                )
+                return
+            }
+
+            val parameter = functionParameter.type.resolve()
+
+            if (functionParameters.size > 1) {
+                logger.error(
+                    "Functions annotated with @Store can only have one parameter. " +
+                            "The function, $functionName has more than one."
+                )
+                return
+            }
+
+            function.checkIfReturnTypeExists(logger)
+
+            when {
+                supportedTypes.find { type -> parameter.toClassName() == type } != null -> false
+                parameter.isEnumClass -> false
+                parameter.isDataClass -> false
+                else -> true
+            }.also {
+                if (it) {
+                    logger.error("Function $functionName parameter type $parameter is not supported by Datastore yet!")
+                    return
                 }
-        }
+            }
 
-        functions.filter {
-            it.annotations.firstOrNull()?.shortName?.asString() == Link::class.simpleName
-        }.forEach {
-            val functionArgs = it.annotations.toList()[0].arguments.firstOrNull() ?: return
+            factoryClassGenerator
+                .initialize(
+                    function = function,
+                    preferenceKeyName = listOf(prefKeyName),
+                    functionParameterType = parameter,
+                    functionAnnotationName = functionAnnotationName!!
+                )
+                .initiateFunctionWithStoreArgs()
+            return
+        } else if (functionAnnotationName == Retrieve::class.simpleName) {
+            val prefKeyName = functionAnnotation.first().arguments[0].value as String
+            if (functionParameter == null) {
+                logger.error(
+                    "Functions annotated with @Retrieve should have a parameter that is of the same type as the function's return type. " +
+                            "For example: a function returns Flow<String> then the parameter of the function should be of type String which will be used by EasyStore as the default value while retrieving nullable String data from DataStore Preferences. " +
+                            "The function, $functionName doesn't have any."
+                )
+                return
+            }
 
-            val parameter = it.parameters[0].type.resolve()
-            if (parameter.toClassName().simpleName == (functionArgs.value as KSType).toClassName().simpleName) {
-                val showError = when {
-                    supportedTypes.find { type -> parameter.toClassName() == type } != null -> false
-                    parameter.isEnumClass -> false
-                    parameter.isDataClass -> false
-                    else -> true
-                }
+            val parameter = functionParameter.type.resolve()
 
-                if (showError) {
-                    logger.error("Function ${it.simpleName.asString()} parameter type $parameter is not supported by Datastore yet!")
+            if (functionParameters.size > 1) {
+                logger.error(
+                    "Functions annotated with @Retrieve can only have one parameter. " +
+                            "The function, $functionName has more than one."
+                )
+                return
+            }
+
+            // Retrieve
+            if (functionReturnType == null || functionReturnType.toClassName().simpleName != "Flow") {
+                logger.error(
+                    "Functions annotated with @Retrieve should return kotlinx.coroutines.Flow<${functionParameter.name ?: "TYPE"}>. " +
+                            "($functionName)"
+                )
+                return
+            }
+
+            if (functionReturnType.toClassName().simpleName == "Flow") {
+                // Check for inner args
+                val innerType = functionReturnType.innerArguments.first().type?.resolve() ?: return
+
+                if (innerType.toClassName().simpleName != parameter.toClassName().simpleName
+                ) {
+                    logger.error("The return type for the function $functionName should be Flow<${parameter.toClassName().simpleName}> as the parameter type is ${parameter.toClassName().simpleName}.")
                     return
                 }
 
                 if (parameter.isDataClass) {
-                    val dataClass: KSClassDeclaration = parameter.declaration as KSClassDeclaration
-                    val annotation = dataClass.annotations.filter { ks ->
-                        ks.shortName.asString() == Store::class.simpleName
-                    }.firstOrNull()
-
-                    if (annotation != null) {
-                        if (annotation.shortName.asString() == Store::class.simpleName) {
-                            val annotationArguments = annotation.arguments
-                            val (preferenceKeyName, getterFunctionName) = annotationArguments.getStoreAnnotationArgs()
-
-                            val factoryClassGenerator = DsFactoryClassGenerator(it, logger)
-
-                            val unSupportedParamName = mutableListOf<String>()
-
-                            val areDataClassPropertiesSupported =
-                                dataClass.getAllProperties().toList()
-                                    .map { property ->
-                                        val toClass = property.type.resolve()
-                                        Pair(
-                                            supportedTypes.find { type -> toClass.toClassName() == type } != null || toClass.isEnumClass,
-                                            property.simpleName.asString()
-                                        )
-                                    }.also { list ->
-                                        list.filter { (b, _) ->
-                                            !b
-                                        }.forEach { (_, s) ->
-                                            unSupportedParamName.add(s)
-                                        }
-                                    }
-
-                            if (areDataClassPropertiesSupported.any { (b, _) -> !b }) {
-                                logger.error("$unSupportedParamName parameter(s) of the class linked to the function ${it.simpleName.asString()} are not supported by Datastore yet!")
-                                return
-                            }
-
-                            val preferenceKeysFromDataClass =
-                                dataClass.getAllProperties().toList().map { property ->
-                                    preferenceKeyName + "_" + property.simpleName.asString()
-                                }
-
-                            val preferenceKeyTypeFromDataClass =
-                                dataClass.getAllProperties().toList().map { property ->
-                                    property.type.resolve()
-                                }
-
-                            val returns = factoryClassGenerator.initiate(
-                                preferenceKeyName = preferenceKeysFromDataClass,
-                                getterFunctionName = getterFunctionName,
-                                preferenceKeyType = preferenceKeyTypeFromDataClass
-                            )
-
-                            if (returns != null) {
-                                generatedFunctions.addAll(returns.first)
-                                generatedProperties.addAll(returns.second)
-                                generatedImportNames.addAll(returns.third)
-                            } else {
-                                logger.error("Factory returned null values")
-                                return
-                            }
-                        }
-                    } else {
-                        logger.error("The class linked inside @Link should be annotated with @Store")
-                        return
-                    }
-                }
+                    function.initiate(
+                        parameter = parameter,
+                        functionName = functionName,
+                        preferenceKeyName = prefKeyName
+                    )
+                } else factoryClassGenerator
+                    .initialize(
+                        function = function,
+                        preferenceKeyName = listOf(prefKeyName),
+                        functionParameterType = parameter,
+                        functionAnnotationName = functionAnnotationName!!
+                    ).initiateFunctionsWithRetrieveArgs()
             } else {
-                logger.error("The function parameter type and the class linked with @Link are not of the same type.")
+                logger.error("return type name is not flow, ${functionReturnType.toClassName().simpleName}")
                 return
             }
+        } else return
+
+        generatedFunctions = (factoryClassGenerator.generatedFunctions)
+        generatedProperties = (factoryClassGenerator.generatedProperties.map { it.spec })
+        generatedImportNames = (factoryClassGenerator.generatedImportNames)
+    }
+
+    private fun KSFunctionDeclaration.initiate(
+        parameter: KSType,
+        functionName: String,
+        preferenceKeyName: String,
+    ) {
+        val dataClass: KSClassDeclaration = parameter.declaration as KSClassDeclaration
+
+        val unSupportedParamName = mutableListOf<String>()
+
+        val areDataClassPropertiesSupported =
+            dataClass.getAllProperties().toList()
+                .map { property ->
+                    val toClass = property.type.resolve()
+                    Pair(
+                        supportedTypes.find { type -> toClass.toClassName() == type } != null || toClass.isEnumClass,
+                        property.simpleName.asString()
+                    )
+                }.also { list ->
+                    list.filter { (b, _) ->
+                        !b
+                    }.forEach { (_, s) ->
+                        unSupportedParamName.add(s)
+                    }
+                }
+
+        if (areDataClassPropertiesSupported.any { (b, _) -> !b }) {
+            logger.error("$unSupportedParamName parameter(s) of the class linked to the function $functionName are not supported by Datastore yet!")
+            return
         }
+
+        val preferenceKeysFromDataClass =
+            dataClass.getAllProperties().toList().map { property ->
+                preferenceKeyName + "_" + property.simpleName.asString()
+            }
+
+        factoryClassGenerator
+            .initialize(
+                function = this,
+                preferenceKeyName = preferenceKeysFromDataClass,
+                functionParameterType = parameter,
+                functionAnnotationName = Retrieve::class.simpleName!!
+            ).initiateFunctionsWithRetrieveArgs()
     }
 }

@@ -4,53 +4,50 @@
  */
 package kasem.sm.easystore.processor.validators
 
+import com.google.devtools.ksp.processing.KSPLogger
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.PropertySpec
+import kasem.sm.easystore.processor.generator.PropKey
 
 internal fun validateStoreArgs(
     preferenceKeyName: String,
-    getterFunctionName: String,
     functionName: String,
-    errorMessage: (String) -> Unit
+    logger: KSPLogger
 ) {
     if (preferenceKeyName.isEmpty()) {
-        errorMessage("preferenceKeyName for $functionName is empty.")
+        logger.error("preferenceKeyName for $functionName is empty.")
         return
     }
 
-    if (getterFunctionName.isEmpty()) {
-        errorMessage("getterFunctionName for $functionName is empty.")
-        return
-    }
-
-    if (preferenceKeyName.containsSpecialChars() || getterFunctionName.containsSpecialChars()) {
-        errorMessage("preferenceKeyName or the getterFunctionName should not contain any special characters.")
+    if (preferenceKeyName.containsSpecialChars() ) {
+        logger.error("preferenceKeyName should not contain any special characters.")
         return
     }
 }
 
-internal fun List<FunSpec>.validateFunctionNameAlreadyExistsOrNot(
-    currentFunctionName: String,
-    errorMessage: (String) -> Unit
-) {
-    val spec: FunSpec? = find {
-        it.name == currentFunctionName
-    }
-    if (spec != null) {
-        errorMessage("The getterFunctionName is same for two or more functions annotated with @Store.")
-        return
-    }
-}
-
-internal fun List<PropertySpec>.validatePreferenceKeyIsUniqueOrNot(
+internal fun List<PropKey>.validatePreferenceKeyIsUniqueOrNot(
     currentPropertyName: String,
-    errorMessage: (String) -> Unit
+    logger: KSPLogger
 ) {
-    val spec: PropertySpec? = find {
-        it.name == currentPropertyName
+    val spec = filter {
+        it.annotationName == "Store"
+    }.find {
+        it.spec.name == currentPropertyName
     }
+
     if (spec != null) {
-        errorMessage("preferenceKeyName is not unique. Every function that are annotated with @Store should have a unique key name.")
+        logger.error("preferenceKeyName is not unique. Every function that are annotated with @Store should have a unique key name.")
+        return
+    }
+
+    val spec2 = filter {
+        it.annotationName == "Retrieve"
+    }.find {
+        it.spec.name == currentPropertyName
+    }
+
+    if (spec2 != null) {
+        logger.error("preferenceKeyName is not unique. Every function that are annotated with @Retrieve should have a unique key name.")
         return
     }
 }
