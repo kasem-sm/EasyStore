@@ -4,6 +4,8 @@
  */
 package kasem.sm.easystore.core
 
-@Target(AnnotationTarget.CLASS)
+@Target(AnnotationTarget.FUNCTION)
 @Retention(AnnotationRetention.SOURCE)
-annotation class EasyStore
+annotation class Retrieve(
+    val preferenceKeyName: String
+)

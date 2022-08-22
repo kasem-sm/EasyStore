@@ -11,9 +11,10 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.google.devtools.ksp.symbol.KSType
-import com.google.devtools.ksp.symbol.Modifier
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.asClassName
+
+// TODO("Add custom exceptions")
 
 internal fun KSType.toDataStoreKey(): ClassName {
     return when (declaration.simpleName.asString()) {
@@ -24,14 +25,14 @@ internal fun KSType.toDataStoreKey(): ClassName {
         Float::class.simpleName -> floatPreferencesKey("")::class
         Long::class.simpleName -> longPreferencesKey("")::class
         else -> {
-            if (declaration.modifiers.first() == Modifier.ENUM) {
+            if (isEnumClass || isDataClass) {
                 stringPreferencesKey("")::class
             } else throw UnknownError()
         }
     }.asClassName()
 }
 
-val supportedTypes = listOf(
+internal val supportedTypes = listOf(
     Int::class,
     String::class,
     Double::class,
@@ -43,4 +44,18 @@ val supportedTypes = listOf(
     it.asClassName()
 }
 
-internal val KSType.isEnumClass get() = declaration.modifiers.firstOrNull() == Modifier.ENUM
+internal fun String.toPreferenceKeyCode(preferenceKeyName: String, isEnum: Boolean): String {
+    return when (this) {
+        Int::class.simpleName -> "intPreferencesKey(\"$preferenceKeyName\")"
+        String::class.simpleName -> "stringPreferencesKey(\"$preferenceKeyName\")"
+        Double::class.simpleName -> "doublePreferencesKey(\"$preferenceKeyName\")"
+        Boolean::class.simpleName -> "booleanPreferencesKey(\"$preferenceKeyName\")"
+        Float::class.simpleName -> "floatPreferencesKey(\"$preferenceKeyName\")"
+        Long::class.simpleName -> "longPreferencesKey(\"$preferenceKeyName\")"
+        else -> {
+            if (isEnum) {
+                "stringPreferencesKey(\"$preferenceKeyName\")"
+            } else throw Exception()
+        }
+    }
+}

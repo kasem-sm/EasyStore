@@ -4,53 +4,44 @@
  */
 package kasem.sm.easystore.processor.validators
 
-import com.squareup.kotlinpoet.FunSpec
-import com.squareup.kotlinpoet.PropertySpec
+import com.google.devtools.ksp.processing.KSPLogger
+import kasem.sm.easystore.core.Store
+import kasem.sm.easystore.processor.generator.PropKey
 
 internal fun validateStoreArgs(
     preferenceKeyName: String,
-    getterFunctionName: String,
     functionName: String,
-    errorMessage: (String) -> Unit
+    logger: KSPLogger
 ) {
     if (preferenceKeyName.isEmpty()) {
-        errorMessage("preferenceKeyName for $functionName is empty.")
+        logger.error("preferenceKeyName for $functionName is empty.")
         return
     }
 
-    if (getterFunctionName.isEmpty()) {
-        errorMessage("getterFunctionName for $functionName is empty.")
-        return
-    }
-
-    if (preferenceKeyName.containsSpecialChars() || getterFunctionName.containsSpecialChars()) {
-        errorMessage("preferenceKeyName or the getterFunctionName should not contain any special characters.")
+    if (preferenceKeyName.containsSpecialChars()) {
+        logger.error("preferenceKeyName should not contain any special characters.")
         return
     }
 }
 
-internal fun List<FunSpec>.validateFunctionNameAlreadyExistsOrNot(
-    currentFunctionName: String,
-    errorMessage: (String) -> Unit
-) {
-    val spec = find {
-        it.name == currentFunctionName
-    }
-    if (spec != null) {
-        errorMessage("The getterFunctionName is same for two or more functions annotated with @Store.")
-        return
-    }
-}
-
-internal fun List<PropertySpec>.validatePreferenceKeyIsUniqueOrNot(
+internal fun List<PropKey>.validatePreferenceKeyIsUniqueOrNot(
     currentPropertyName: String,
-    errorMessage: (String) -> Unit
+    logger: KSPLogger
 ) {
-    find {
-        it.name == currentPropertyName
-    }.apply {
-        if (this != null) {
-            errorMessage("preferenceKeyName is not unique. Every function that are annotated with @Store should have a unique key name.")
+    filter {
+        it.annotationName == Store::class.simpleName && it.spec.name == currentPropertyName
+    }.also {
+        if (it.size > 1) {
+            logger.error("preferenceKeyName is not unique. Every function that are annotated with @Store should have a unique key name.")
+            return
+        }
+    }
+
+    filter {
+        it.annotationName == Retention::class.simpleName && it.spec.name == currentPropertyName
+    }.also {
+        if (it.size > 1) {
+            logger.error("preferenceKeyName is not unique. Every function that are annotated with @Retrieve should have a unique key name.")
             return
         }
     }

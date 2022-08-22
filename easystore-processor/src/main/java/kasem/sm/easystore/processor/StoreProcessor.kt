@@ -41,21 +41,18 @@ class StoreProcessor(
                 .forEach {
                     visitor = StoreVisitor(logger)
                     it.accept(visitor, Unit)
+                    storeFileGenerator = StoreFileGenerator(visitor)
+                    try {
+                        storeFileGenerator.fileSpec.build()
+                            .writeTo(codeGenerator = codeGenerator, aggregating = false)
+                    } catch (e: FileAlreadyExistsException) {
+                        logger.logging(e.message.toString())
+                    } catch (e: Exception) {
+                        logger.error(e.message.toString())
+                    }
                 }
 
-            if (::visitor.isInitialized) {
-                storeFileGenerator = StoreFileGenerator(visitor)
-
-                try {
-                    storeFileGenerator.fileSpec.build().writeTo(codeGenerator = codeGenerator, aggregating = false)
-                } catch (e: FileAlreadyExistsException) {
-                    logger.logging(e.message.toString())
-                } catch (e: Exception) {
-                    logger.error(e.message.toString())
-                }
-
-                unresolvedSymbols = resolved - validatedSymbols.toSet()
-            }
+            unresolvedSymbols = resolved - validatedSymbols.toSet()
         }
         return unresolvedSymbols
     }
