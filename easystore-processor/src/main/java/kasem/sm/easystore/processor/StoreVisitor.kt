@@ -26,13 +26,12 @@ import kasem.sm.easystore.processor.ksp.isEnumClass
 import kasem.sm.easystore.processor.ksp.supportedTypes
 
 class StoreVisitor(
-    private val logger: KSPLogger,
-    resolver: Resolver
+    private val logger: KSPLogger
 ) : KSVisitorVoid() {
 
     internal lateinit var className: ClassName
     internal lateinit var packageName: String
-    private val factoryClassGenerator = DsFactoryClassGenerator(logger, resolver)
+    private val factoryClassGenerator = DsFactoryClassGenerator(logger)
 
     internal var generatedFunctions = listOf<FunSpec>()
     internal var generatedProperties = listOf<PropertySpec>()

@@ -24,8 +24,7 @@ data class PropKey(
 )
 
 internal class DsFactoryClassGenerator(
-    private val logger: KSPLogger,
-    private val resolver: Resolver
+    private val logger: KSPLogger
 ) {
     internal val generatedFunctions = mutableListOf<FunSpec>()
     internal val generatedProperties = mutableListOf<PropKey>()

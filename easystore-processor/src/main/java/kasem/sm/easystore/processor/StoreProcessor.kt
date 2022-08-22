@@ -39,7 +39,7 @@ class StoreProcessor(
                     it is KSClassDeclaration && it.validate()
                 }
                 .forEach {
-                    visitor = StoreVisitor(logger, resolver)
+                    visitor = StoreVisitor(logger)
                     it.accept(visitor, Unit)
                     storeFileGenerator = StoreFileGenerator(visitor)
                     try {
