@@ -63,12 +63,12 @@ internal class DsFunctionsGenerator {
 
         val editBlock = if (isDataClass) {
             var addBlock = ""
-            functionParamType.getAllProperties().zip(preferenceKeyPropertyName).forEach {
-                val type = it.first.type.resolve()
+            functionParamType.getAllProperties().zip(preferenceKeyPropertyName).forEach { (property, key) ->
+                val type = property.type.resolve()
                 val afterInnerElvis = if (type.isEnumClass) {
-                    "$functionParameterName.${it.first.simpleName.asString()}.name\n"
-                } else "$functionParameterName.${it.first.simpleName.asString()}\n"
-                addBlock += "preferences[${it.second}] ?: $afterInnerElvis"
+                    "$functionParameterName.${property.simpleName.asString()}.name\n"
+                } else "$functionParameterName.${property.simpleName.asString()}\n"
+                addBlock += "preferences[$key] = $afterInnerElvis"
             }
             addBlock
         } else "preferences[${preferenceKeyPropertyName[0]}] = $afterElvis"
@@ -95,22 +95,26 @@ internal class DsFunctionsGenerator {
     fun generateDSGetFunction(
         functionParameterType: KSType,
         functionName: String,
-        preferenceKeyPropertyName: List<String>
+        preferenceKeyPropertyName: List<String>,
+        parameterName: String
     ): FunSpec {
         val paramType = functionParameterType.toClassName()
 
         val mapBlock = if (!functionParameterType.isDataClass) {
             if (functionParameterType.isEnumClass) {
-                "$paramType.valueOf(preference[${preferenceKeyPropertyName[0]}] ?: defaultValue.name)"
-            } else "preference[${preferenceKeyPropertyName[0]}] ?: defaultValue"
+                "$paramType.valueOf(preference[${preferenceKeyPropertyName[0]}] ?: $parameterName.name)"
+            } else {
+                "preference[${preferenceKeyPropertyName[0]}] ?: $parameterName"
+            }
         } else {
             var codeBlock = ""
-            functionParameterType.getAllProperties().zip(preferenceKeyPropertyName).forEach {
-                val type = it.first.type.resolve()
-                codeBlock += if (type.isEnumClass) {
-                    "${type.toClassName()}.valueOf(preference[${preferenceKeyPropertyName[0]}] ?: defaultValue.${it.first.simpleName.asString()}.name),\n"
-                } else "preference[${it.second}] ?: defaultValue.${it.first.simpleName.asString()},\n"
-            }
+            functionParameterType.getAllProperties().zip(preferenceKeyPropertyName)
+                .forEachIndexed { index, (property, key) ->
+                    val type = property.type.resolve()
+                    codeBlock += if (type.isEnumClass) {
+                        "${type.toClassName()}.valueOf(preference[${preferenceKeyPropertyName[0]}] ?: $parameterName.${property.simpleName.asString()}.name),\n"
+                    } else "preference[$key] ?: $parameterName.${property.simpleName.asString()},\n"
+                }
             "$paramType($codeBlock)"
         }
 
@@ -131,7 +135,7 @@ internal class DsFunctionsGenerator {
             name = functionName
         ).apply {
             addModifiers(KModifier.OVERRIDE)
-            addParameter("defaultValue", paramType)
+            addParameter(parameterName, paramType)
             returns(Flow::class.asClassName().parameterizedBy(paramType))
             addCode(codeBlock)
         }.build()

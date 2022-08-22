@@ -14,6 +14,8 @@ import com.google.devtools.ksp.symbol.KSType
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.asClassName
 
+// TODO("Add custom exceptions")
+
 internal fun KSType.toDataStoreKey(): ClassName {
     return when (declaration.simpleName.asString()) {
         Int::class.simpleName -> intPreferencesKey("")::class

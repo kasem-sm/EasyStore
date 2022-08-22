@@ -6,11 +6,13 @@ package kasem.sm.easystore.processor
 
 import com.google.devtools.ksp.innerArguments
 import com.google.devtools.ksp.processing.KSPLogger
+import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSVisitorVoid
+import com.google.devtools.ksp.symbol.Modifier
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.PropertySpec
@@ -24,12 +26,13 @@ import kasem.sm.easystore.processor.ksp.isEnumClass
 import kasem.sm.easystore.processor.ksp.supportedTypes
 
 class StoreVisitor(
-    private val logger: KSPLogger
+    private val logger: KSPLogger,
+    resolver: Resolver
 ) : KSVisitorVoid() {
 
     internal lateinit var className: ClassName
     internal lateinit var packageName: String
-    private val factoryClassGenerator = DsFactoryClassGenerator(logger)
+    private val factoryClassGenerator = DsFactoryClassGenerator(logger, resolver)
 
     internal var generatedFunctions = listOf<FunSpec>()
     internal var generatedProperties = listOf<PropertySpec>()
@@ -49,14 +52,29 @@ class StoreVisitor(
         functions
             .filter {
                 it.annotations.firstOrNull()?.shortName?.asString() == Store::class.simpleName
-            }.forEach {
+            }.filter {
+                if (it.modifiers.firstOrNull() != Modifier.SUSPEND) {
+                    logger.error("Functions annotated with @Store should be used with suspend keyword.")
+                    return
+                }
+                it.modifiers.firstOrNull() == Modifier.SUSPEND
+            }
+            .forEach {
                 visitFunctionDeclaration(it, Unit)
             }
 
         functions
             .filter {
                 it.annotations.firstOrNull()?.shortName?.asString() == Retrieve::class.simpleName
-            }.forEach {
+            }
+            .filter {
+                if (it.modifiers.firstOrNull() == Modifier.SUSPEND) {
+                    logger.error("Functions annotated with @Retrieve should not have the suspend keyword.")
+                    return
+                }
+                it.modifiers.firstOrNull() != Modifier.SUSPEND
+            }
+            .forEach {
                 visitFunctionDeclaration(it, Unit)
             }
     }
@@ -106,18 +124,17 @@ class StoreVisitor(
             factoryClassGenerator
                 .initialize(
                     function = function,
-                    preferenceKeyName = listOf(prefKeyName),
+                    preferenceKeyName = prefKeyName,
                     functionParameterType = parameter,
                     functionAnnotationName = functionAnnotationName!!
                 )
                 .initiateFunctionWithStoreArgs()
-            return
         } else if (functionAnnotationName == Retrieve::class.simpleName) {
             val prefKeyName = functionAnnotation.first().arguments[0].value as String
             if (functionParameter == null) {
                 logger.error(
                     "Functions annotated with @Retrieve should have a parameter that is of the same type as the function's return type. " +
-                            "For example: a function returns Flow<String> then the parameter of the function should be of type String which will be used by EasyStore as the default value while retrieving nullable String data from DataStore Preferences. " +
+                            "For example: If a function returns Flow<String> then the parameter of the function should be of type String which will be used by EasyStore as the default value while retrieving nullable String data from DataStore Preferences. " +
                             "The function, $functionName doesn't have any."
                 )
                 return
@@ -136,7 +153,7 @@ class StoreVisitor(
             // Retrieve
             if (functionReturnType == null || functionReturnType.toClassName().simpleName != "Flow") {
                 logger.error(
-                    "Functions annotated with @Retrieve should return kotlinx.coroutines.Flow<${functionParameter.name ?: "TYPE"}>. " +
+                    "Functions annotated with @Retrieve should return Flow<PARAM_TYPE>. " +
                             "($functionName)"
                 )
                 return
@@ -161,7 +178,7 @@ class StoreVisitor(
                 } else factoryClassGenerator
                     .initialize(
                         function = function,
-                        preferenceKeyName = listOf(prefKeyName),
+                        preferenceKeyName = prefKeyName,
                         functionParameterType = parameter,
                         functionAnnotationName = functionAnnotationName!!
                     ).initiateFunctionsWithRetrieveArgs()
@@ -189,6 +206,12 @@ class StoreVisitor(
             dataClass.getAllProperties().toList()
                 .map { property ->
                     val toClass = property.type.resolve()
+                    if (toClass.isDataClass) {
+                        // Nested data class
+                        // Not supported as of now
+                        logger.error("Nested data class is not supported by EasyStore. (${toClass.toClassName().simpleName})")
+                        return
+                    }
                     Pair(
                         supportedTypes.find { type -> toClass.toClassName() == type } != null || toClass.isEnumClass,
                         property.simpleName.asString()
@@ -206,17 +229,12 @@ class StoreVisitor(
             return
         }
 
-        val preferenceKeysFromDataClass =
-            dataClass.getAllProperties().toList().map { property ->
-                preferenceKeyName + "_" + property.simpleName.asString()
-            }
-
         factoryClassGenerator
             .initialize(
                 function = this,
-                preferenceKeyName = preferenceKeysFromDataClass,
                 functionParameterType = parameter,
-                functionAnnotationName = Retrieve::class.simpleName!!
+                functionAnnotationName = Retrieve::class.simpleName!!,
+                preferenceKeyName = preferenceKeyName
             ).initiateFunctionsWithRetrieveArgs()
     }
 }

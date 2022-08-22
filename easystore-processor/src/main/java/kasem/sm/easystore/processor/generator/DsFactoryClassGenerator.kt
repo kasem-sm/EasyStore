@@ -5,12 +5,14 @@
 package kasem.sm.easystore.processor.generator
 
 import com.google.devtools.ksp.processing.KSPLogger
+import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.ksp.toClassName
+import kasem.sm.easystore.core.Store
 import kasem.sm.easystore.processor.ksp.getAllProperties
 import kasem.sm.easystore.processor.ksp.isDataClass
 import kasem.sm.easystore.processor.validators.validatePreferenceKeyIsUniqueOrNot
@@ -23,14 +25,15 @@ data class PropKey(
 
 internal class DsFactoryClassGenerator(
     private val logger: KSPLogger,
+    private val resolver: Resolver
 ) {
     internal val generatedFunctions = mutableListOf<FunSpec>()
     internal val generatedProperties = mutableListOf<PropKey>()
     internal val generatedImportNames = mutableListOf<String>()
 
     private val generator = DsFunctionsGenerator()
-    private lateinit var preferenceKeyName: List<String>
-    private lateinit var preferenceKeyPropertyName: List<String>
+    private lateinit var preferenceKeyName: String
+    private lateinit var preferenceKeyPropertyName: String
     private lateinit var functionName: String
     private lateinit var function: KSFunctionDeclaration
     private lateinit var functionParameterType: KSType
@@ -38,33 +41,28 @@ internal class DsFactoryClassGenerator(
 
     fun initialize(
         function: KSFunctionDeclaration,
-        preferenceKeyName: List<String>,
+        preferenceKeyName: String,
         functionParameterType: KSType,
         functionAnnotationName: String
-    ) = apply {
+    ): DsFactoryClassGenerator = apply {
         this.functionAnnotationName = functionAnnotationName
         this.function = function
         this.preferenceKeyName = preferenceKeyName
-        preferenceKeyPropertyName = this.preferenceKeyName.map {
-            "${it.uppercase()}_KEY"
-        }
         this.functionParameterType = functionParameterType
+
+        preferenceKeyPropertyName = "${preferenceKeyName.uppercase()}_KEY"
         functionName = function.simpleName.getShortName()
 
-        this.preferenceKeyName.forEach {
-            validateStoreArgs(
-                preferenceKeyName = it,
-                functionName = functionName,
-                logger = logger
-            )
-        }
+        validateStoreArgs(
+            preferenceKeyName = preferenceKeyName,
+            functionName = functionName,
+            logger = logger
+        )
 
-        this.preferenceKeyPropertyName.forEach {
-            generatedProperties.validatePreferenceKeyIsUniqueOrNot(
-                currentPropertyName = it,
-                logger = logger
-            )
-        }
+        generatedProperties.validatePreferenceKeyIsUniqueOrNot(
+            currentPropertyName = preferenceKeyPropertyName,
+            logger = logger
+        )
     }
 
     fun initiateFunctionWithStoreArgs() {
@@ -74,27 +72,34 @@ internal class DsFactoryClassGenerator(
                 functionParameterType.declaration as KSClassDeclaration
 
             // Generate imports for all Data class properties
-            functionParameterType.getAllProperties().map {
-                it.type.resolve()
+            functionParameterType.getAllProperties().map { property ->
+                val type = property.type.resolve()
+                // Nested data class
+                // Not supported as of now
+                if (type.isDataClass) {
+                    logger.error("Nested data class is not supported by EasyStore. (${type.toClassName().simpleName})")
+                    return
+                }
+                type
             }.forEach {
                 it.dsImportNameGenerator { generatedImportNames.add(it) }
             }
 
-            val preferenceKeyTypeFromDataClass =
-                dataClass.getAllProperties().toList().map { property ->
-                    property.type.resolve()
-                }
+            val properties = dataClass.getAllProperties().toList()
 
-            val preferenceKeysFromDataClass =
-                dataClass.getAllProperties().toList().map { property ->
-                    (functionParameterType.toClassName().simpleName + "_" + property.simpleName.asString() + "_key").uppercase()
-                }
+            val preferenceKeyTypeFromDataClass = properties.map { property ->
+                property.type.resolve()
+            }
 
-            // Generate Keys
+            val preferenceKeyPropertyNameFromDataClass = properties.map { property ->
+                (functionParameterType.toClassName().simpleName + "_" + property.simpleName.asString() + "_key").uppercase()
+            }
+
+            // Generate Property Keys
             generator
                 .generateDSKeyProperty(
                     preferenceKeyType = preferenceKeyTypeFromDataClass,
-                    preferenceKeyName = preferenceKeysFromDataClass
+                    preferenceKeyName = preferenceKeyPropertyNameFromDataClass
                 ).onEach {
                     generatedProperties.add(PropKey(it, functionAnnotationName))
                 }
@@ -104,47 +109,36 @@ internal class DsFactoryClassGenerator(
                 .generateDSAddFunction(
                     functionName = functionName,
                     functionParamType = functionParameterType,
-                    preferenceKeyPropertyName = preferenceKeysFromDataClass,
+                    preferenceKeyPropertyName = preferenceKeyPropertyNameFromDataClass,
                     functionParameterName = function.parameters[0].name?.asString() ?: "value"
                 ).apply {
                     generatedFunctions.add(this)
                 }
         } else {
-            // Generate import or the param type
-            generatedProperties.find {
-                it.spec.name == preferenceKeyName[0]
-            }.also {
-                if (it != null){
-                    generateImportStatementAndPropKey()
-                }
+            functionParameterType.dsImportNameGenerator { name ->
+                generatedImportNames.add(name)
             }
+
+            // Generate Property Keys
+            generator
+                .generateDSKeyProperty(
+                    functionParameterType = functionParameterType,
+                    preferenceKeyName = preferenceKeyName
+                ).apply {
+                    generatedProperties.add(PropKey(this, functionAnnotationName))
+                }
 
             // Generate Add Function
             generator
                 .generateDSAddFunction(
                     functionName = functionName,
                     functionParamType = functionParameterType,
-                    preferenceKeyPropertyName = preferenceKeyPropertyName,
+                    preferenceKeyPropertyName = listOf(preferenceKeyPropertyName),
                     functionParameterName = function.parameters[0].name?.asString() ?: "value"
                 ).apply {
                     generatedFunctions.add(this)
                 }
         }
-    }
-
-    private fun generateImportStatementAndPropKey() {
-        functionParameterType.dsImportNameGenerator { name ->
-            generatedImportNames.add(name)
-        }
-
-        // Generate Keys
-        generator
-            .generateDSKeyProperty(
-                functionParameterType = functionParameterType,
-                preferenceKeyName = preferenceKeyName[0]
-            ).apply {
-                generatedProperties.add(PropKey(this, functionAnnotationName))
-            }
     }
 
     fun initiateFunctionsWithRetrieveArgs() {
@@ -157,28 +151,46 @@ internal class DsFactoryClassGenerator(
                     (functionParameterType.toClassName().simpleName + "_" + property.simpleName.asString() + "_key").uppercase()
                 }
 
+            generatedProperties
+                .filter { it.annotationName == Store::class.simpleName }
+                .find { it.spec.name == preferenceKeysFromDataClass[0] }
+                .also {
+                    if (it == null) {
+                        // TODO("Improve Error Message")
+                        logger.error("Before retrieving any data, please use @Store with $preferenceKeyName preferenceKeyName.")
+                        return
+                    }
+                }
+
+            // Generate Get Function
             generator
                 .generateDSGetFunction(
-                    functionName = functionName,
                     functionParameterType = functionParameterType,
-                    preferenceKeyPropertyName = preferenceKeysFromDataClass
+                    functionName = functionName,
+                    preferenceKeyPropertyName = preferenceKeysFromDataClass,
+                    parameterName = function.parameters[0].name?.asString() ?: "defaultValue"
                 ).apply {
                     generatedFunctions.add(this)
                 }
         } else {
-            generatedProperties.find {
-                it.spec.name == preferenceKeyName[0]
-            }.also {
-                if (it == null){
-                    generateImportStatementAndPropKey()
+            generatedProperties
+                .filter { it.annotationName == Store::class.simpleName }
+                .find { it.spec.name == preferenceKeyPropertyName }
+                .also {
+                    if (it == null) {
+                        // TODO("Improve Error Message")
+                        logger.error("Before retrieving any data, please use @Store with $preferenceKeyName preferenceKeyName.")
+                        return
+                    }
                 }
-            }
 
+            // Generate Get Function
             generator
                 .generateDSGetFunction(
-                    functionName = functionName,
                     functionParameterType = functionParameterType,
-                    preferenceKeyPropertyName = preferenceKeyPropertyName
+                    functionName = functionName,
+                    preferenceKeyPropertyName = listOf(preferenceKeyPropertyName),
+                    parameterName = function.parameters[0].name?.asString() ?: "defaultValue"
                 ).apply {
                     generatedFunctions.add(this)
                 }

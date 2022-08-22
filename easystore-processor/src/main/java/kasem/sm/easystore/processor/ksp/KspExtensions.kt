@@ -19,14 +19,9 @@ internal fun List<KSValueArgument>.getStoreAnnotationArgs(): Pair<String, String
 }
 
 internal fun KSFunctionDeclaration.checkIfReturnTypeExists(logger: KSPLogger) {
-    val functionName = simpleName.asString()
     val returnTypeAsString = returnType?.resolve()?.declaration?.simpleName?.asString()
     if (returnTypeAsString != null && returnTypeAsString != "Unit") {
-        logger.error(
-            "You shouldn't add any return value to the function annotated with @Store. " +
-                "PS: The function's parameter type would also be it's return type but wrapped inside Kotlin Flow. " +
-                "For example, the function $functionName would return Flow<$returnTypeAsString>."
-        )
+        logger.error("You shouldn't add any return value to the function annotated with @Store.")
         return
     }
 }

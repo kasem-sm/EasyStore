@@ -5,8 +5,7 @@
 package kasem.sm.easystore.processor.validators
 
 import com.google.devtools.ksp.processing.KSPLogger
-import com.squareup.kotlinpoet.FunSpec
-import com.squareup.kotlinpoet.PropertySpec
+import kasem.sm.easystore.core.Store
 import kasem.sm.easystore.processor.generator.PropKey
 
 internal fun validateStoreArgs(
@@ -19,7 +18,7 @@ internal fun validateStoreArgs(
         return
     }
 
-    if (preferenceKeyName.containsSpecialChars() ) {
+    if (preferenceKeyName.containsSpecialChars()) {
         logger.error("preferenceKeyName should not contain any special characters.")
         return
     }
@@ -29,26 +28,22 @@ internal fun List<PropKey>.validatePreferenceKeyIsUniqueOrNot(
     currentPropertyName: String,
     logger: KSPLogger
 ) {
-    val spec = filter {
-        it.annotationName == "Store"
-    }.find {
-        it.spec.name == currentPropertyName
+    filter {
+        it.annotationName == Store::class.simpleName && it.spec.name == currentPropertyName
+    }.also {
+        if (it.size > 1) {
+            logger.error("preferenceKeyName is not unique. Every function that are annotated with @Store should have a unique key name.")
+            return
+        }
     }
 
-    if (spec != null) {
-        logger.error("preferenceKeyName is not unique. Every function that are annotated with @Store should have a unique key name.")
-        return
-    }
-
-    val spec2 = filter {
-        it.annotationName == "Retrieve"
-    }.find {
-        it.spec.name == currentPropertyName
-    }
-
-    if (spec2 != null) {
-        logger.error("preferenceKeyName is not unique. Every function that are annotated with @Retrieve should have a unique key name.")
-        return
+    filter {
+        it.annotationName == Retention::class.simpleName && it.spec.name == currentPropertyName
+    }.also {
+        if (it.size > 1) {
+            logger.error("preferenceKeyName is not unique. Every function that are annotated with @Retrieve should have a unique key name.")
+            return
+        }
     }
 }
 
