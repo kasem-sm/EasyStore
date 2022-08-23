@@ -10,9 +10,12 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import com.google.devtools.ksp.symbol.KSType
 import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.asClassName
+import com.squareup.kotlinpoet.asTypeName
 
 // TODO("Add custom exceptions")
 
@@ -24,6 +27,7 @@ internal fun KSType.toDataStoreKey(): ClassName {
         Boolean::class.simpleName -> booleanPreferencesKey("")::class
         Float::class.simpleName -> floatPreferencesKey("")::class
         Long::class.simpleName -> longPreferencesKey("")::class
+        Set::class.asClassName().parameterizedBy(String::class.asTypeName()).rawType.simpleName -> stringSetPreferencesKey("")::class
         else -> {
             if (isEnumClass || isDataClass) {
                 stringPreferencesKey("")::class
@@ -39,7 +43,7 @@ internal val supportedTypes = listOf(
     Boolean::class,
     Float::class,
     Long::class,
-    Enum::class
+    Enum::class,
 ).map {
     it.asClassName()
 }
@@ -52,6 +56,7 @@ internal fun String.toPreferenceKeyCode(preferenceKeyName: String, isEnum: Boole
         Boolean::class.simpleName -> "booleanPreferencesKey(\"$preferenceKeyName\")"
         Float::class.simpleName -> "floatPreferencesKey(\"$preferenceKeyName\")"
         Long::class.simpleName -> "longPreferencesKey(\"$preferenceKeyName\")"
+        Set::class.asClassName().parameterizedBy(String::class.asTypeName()).rawType.simpleName -> "stringSetPreferencesKey(\"$preferenceKeyName\")"
         else -> {
             if (isEnum) {
                 "stringPreferencesKey(\"$preferenceKeyName\")"

@@ -5,7 +5,6 @@
 package kasem.sm.easystore.processor.generator
 
 import com.google.devtools.ksp.processing.KSPLogger
-import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSType
@@ -133,7 +132,7 @@ internal class DsFactoryClassGenerator(
                     functionName = functionName,
                     functionParamType = functionParameterType,
                     preferenceKeyPropertyName = listOf(preferenceKeyPropertyName),
-                    functionParameterName = function.parameters[0].name?.asString() ?: "value"
+                    functionParameterName = function.parameters[0].name?.asString() ?: "value",
                 ).apply {
                     generatedFunctions.add(this)
                 }

@@ -6,7 +6,6 @@ package kasem.sm.easystore.processor
 
 import com.google.devtools.ksp.innerArguments
 import com.google.devtools.ksp.processing.KSPLogger
-import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
@@ -16,6 +15,7 @@ import com.google.devtools.ksp.symbol.Modifier
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.asClassName
 import com.squareup.kotlinpoet.ksp.toClassName
 import kasem.sm.easystore.core.Retrieve
 import kasem.sm.easystore.core.Store
@@ -112,7 +112,10 @@ class StoreVisitor(
                 supportedTypes.find { type -> parameter.toClassName() == type } != null -> false
                 parameter.isEnumClass -> false
                 parameter.isDataClass -> false
-                else -> true
+                parameter.innerArguments.firstOrNull()?.type?.resolve()?.toClassName() == String::class.asClassName() -> false
+                else -> {
+                    true
+                }
             }.also {
                 if (it) {
                     logger.error("Function $functionName parameter type $parameter is not supported by Datastore yet!")
@@ -212,8 +215,10 @@ class StoreVisitor(
                         return
                     }
                     Pair(
-                        supportedTypes.find { type -> toClass.toClassName() == type } != null || toClass.isEnumClass,
-                        property.simpleName.asString()
+                        supportedTypes.find { type -> toClass.toClassName() == type } != null
+                                || toClass.isEnumClass
+                                || toClass.innerArguments.firstOrNull()?.type?.resolve()?.toClassName() == String::class.asClassName(),
+                    toClass.toClassName().simpleName
                     )
                 }.also { list ->
                     list.filter { (b, _) ->
@@ -224,7 +229,7 @@ class StoreVisitor(
                 }
 
         if (areDataClassPropertiesSupported.any { (b, _) -> !b }) {
-            logger.error("$unSupportedParamName parameter(s) of the class linked to the function $functionName are not supported by Datastore yet!")
+            logger.error("$unSupportedParamName parameter type of the class ${dataClass.simpleName.asString()} linked to the function $functionName is not supported by Datastore yet!")
             return
         }
 

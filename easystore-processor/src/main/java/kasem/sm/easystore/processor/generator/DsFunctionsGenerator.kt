@@ -4,6 +4,7 @@
  */
 package kasem.sm.easystore.processor.generator
 
+import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.KSType
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FunSpec
@@ -15,6 +16,7 @@ import com.squareup.kotlinpoet.ksp.toClassName
 import kasem.sm.easystore.processor.ksp.getAllProperties
 import kasem.sm.easystore.processor.ksp.isDataClass
 import kasem.sm.easystore.processor.ksp.isEnumClass
+import kasem.sm.easystore.processor.ksp.isStringSet
 import kasem.sm.easystore.processor.ksp.toDataStoreKey
 import kasem.sm.easystore.processor.ksp.toPreferenceKeyCode
 import kotlinx.coroutines.flow.Flow
@@ -55,6 +57,7 @@ internal class DsFunctionsGenerator {
     ): FunSpec {
         val isEnum = functionParamType.isEnumClass
         val isDataClass = functionParamType.isDataClass
+        val isStringSet = functionParamType.isStringSet
 
         // Check if it's enum and not String::class
         val afterElvis = if (isEnum) {
@@ -86,7 +89,9 @@ internal class DsFunctionsGenerator {
             addModifiers(KModifier.SUSPEND)
             addParameter(
                 name = functionParameterName,
-                type = functionParamType.toClassName()
+                type =  if (isStringSet) {
+                    functionParamType.toClassName().parameterizedBy(String::class.asClassName())
+                } else functionParamType.toClassName()
             )
             addCode(CodeBlock.of(codeBlock))
         }.build()
@@ -148,9 +153,11 @@ internal class DsFunctionsGenerator {
             propertyName: String
         ): PropertySpec {
             val dataStoreKeyType = ksType.toDataStoreKey().parameterizedBy(
-                if (ksType.isEnumClass) {
-                    String::class.asClassName()
-                } else ksType.toClassName()
+                when {
+                    ksType.isEnumClass -> String::class.asClassName()
+                    ksType.isStringSet -> Set::class.asClassName().parameterizedBy(String::class.asClassName())
+                    else -> ksType.toClassName()
+                }
             )
 
             val codeBlock = ksType.declaration.simpleName.asString()
@@ -161,7 +168,7 @@ internal class DsFunctionsGenerator {
 
             return PropertySpec.builder(
                 name = propertyName,
-                type = dataStoreKeyType
+                type =  dataStoreKeyType
             ).apply {
                 addModifiers(KModifier.PRIVATE)
                 initializer(CodeBlock.of(codeBlock))
