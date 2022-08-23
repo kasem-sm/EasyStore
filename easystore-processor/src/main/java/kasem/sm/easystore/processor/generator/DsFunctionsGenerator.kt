@@ -109,7 +109,7 @@ internal class DsFunctionsGenerator {
         } else {
             var codeBlock = ""
             functionParameterType.getAllProperties().zip(preferenceKeyPropertyName)
-                .forEachIndexed { index, (property, key) ->
+                .forEach { (property, key) ->
                     val type = property.type.resolve()
                     codeBlock += if (type.isEnumClass) {
                         "${type.toClassName()}.valueOf(preference[${preferenceKeyPropertyName[0]}] ?: $parameterName.${property.simpleName.asString()}.name),\n"
