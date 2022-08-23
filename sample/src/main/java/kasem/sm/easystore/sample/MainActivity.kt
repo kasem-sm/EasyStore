@@ -14,11 +14,13 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.lifecycle.lifecycleScope
 import kasem.sm.easystore.core.EasyStore
 import kasem.sm.easystore.core.Retrieve
 import kasem.sm.easystore.core.Store
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 // EasyStore will generate an implementation of this interface
 @EasyStore
@@ -91,7 +93,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateTheme(theme: Theme) {
-        withRepeatOnLifecycle {
+        lifecycleScope.launch {
             appPreferences.updateTheme(theme)
         }
     }
