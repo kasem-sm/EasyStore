@@ -21,7 +21,7 @@ jobs:
       - name: Make Gradle executable
         run: chmod +x ./gradlew
       - name: Release build
-        run: ./gradlew assembleRelease -x :sample:assembleRelease -x :buildSrc:assembleRelease
+        run: ./gradlew assembleRelease -x :sample:assembleRelease
       - name: Source jar and dokka
         run: ./gradlew androidSourcesJar javadocJar --scan
       - name: Publish to MavenCentral
