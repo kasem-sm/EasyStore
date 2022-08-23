@@ -8,7 +8,7 @@ sourceSets.main {
 
 rootProject.extra.apply {
     set("PUBLISH_GROUP_ID", LibraryConfigs.groupId)
-    set("PUBLISH_VERSION", LibraryConfigs.version)
+    set("PUBLISH_VERSION", rootProject.extra.get("rootVersionName"))
     set("PUBLISH_ARTIFACT_ID", "core")
 }
 
