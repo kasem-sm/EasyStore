@@ -20,11 +20,13 @@ import kasem.sm.easystore.core.Store
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 
+// EasyStore will generate an implementation of this interface
 @EasyStore
 interface AppPreferences {
     @Store(preferenceKeyName = "app_theme")
     suspend fun updateTheme(theme: Theme)
 
+    // Automatic Enum mapping (Also supports Data Class)
     @Retrieve(preferenceKeyName = "app_theme")
     fun getAppTheme(default: Theme): Flow<Theme>
 }
@@ -33,6 +35,7 @@ enum class Theme {
     DARK, LIGHT, SYSTEM
 }
 
+// Single Instance of DataStore
 private val Context.dataStore: DataStore<Preferences>
         by preferencesDataStore(name = "my_prefs")
 
