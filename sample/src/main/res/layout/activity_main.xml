@@ -8,19 +8,17 @@
     tools:context=".MainActivity">
 
     <Button
-        android:id="@+id/myButton"
+        android:id="@+id/changeThemeBtn"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:text="Save Data" />
-
+        android:text="@string/change_theme" />
 
     <TextView
-        android:id="@+id/myTextView"
+        android:id="@+id/currentThemeTv"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:text="Saved data was: " />
-
+        android:text="@string/current_theme" />
 
 </LinearLayout>

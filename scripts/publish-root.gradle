@@ -5,6 +5,7 @@ ext["signing.key"] = ''
 ext["ossrhUsername"] = ''
 ext["ossrhPassword"] = ''
 ext["sonatypeStagingProfileId"] = ''
+ext["snapshot"] = ''
 
 File secretPropsFile = project.rootProject.file('local.properties')
 if (secretPropsFile.exists()) {
@@ -23,6 +24,12 @@ if (secretPropsFile.exists()) {
     ext["snapshot"] = System.getenv('SNAPSHOT')
 }
 
+if (snapshot) {
+    ext["rootVersionName"] = LibraryConfigs.snapshotVersion
+} else {
+    ext["rootVersionName"] = LibraryConfigs.version
+}
+
 // Set up Sonatype repository
 nexusPublishing {
     repositories {
@@ -30,7 +37,7 @@ nexusPublishing {
             stagingProfileId = sonatypeStagingProfileId
             username = ossrhUsername
             password = ossrhPassword
-            version = "0.0.1"
+            version = rootVersionName
             nexusUrl.set(uri("https://s01.oss.sonatype.org/service/local/"))
             snapshotRepositoryUrl.set(uri("https://s01.oss.sonatype.org/content/repositories/snapshots/"))
         }

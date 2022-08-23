@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">EasyStore</string>
+    <string name="change_theme">Change Theme</string>
+    <string name="current_theme">Current Theme %s</string>
 </resources>
