@@ -4,7 +4,6 @@
  */
 package kasem.sm.easystore.processor.generator
 
-import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.KSType
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FunSpec
@@ -66,13 +65,14 @@ internal class DsFunctionsGenerator {
 
         val editBlock = if (isDataClass) {
             var addBlock = ""
-            functionParamType.getAllProperties().zip(preferenceKeyPropertyName).forEach { (property, key) ->
-                val type = property.type.resolve()
-                val afterInnerElvis = if (type.isEnumClass) {
-                    "$functionParameterName.${property.simpleName.asString()}.name\n"
-                } else "$functionParameterName.${property.simpleName.asString()}\n"
-                addBlock += "preferences[$key] = $afterInnerElvis"
-            }
+            functionParamType.getAllProperties().zip(preferenceKeyPropertyName)
+                .forEach { (property, key) ->
+                    val type = property.type.resolve()
+                    val afterInnerElvis = if (type.isEnumClass) {
+                        "$functionParameterName.${property.simpleName.asString()}.name\n"
+                    } else "$functionParameterName.${property.simpleName.asString()}\n"
+                    addBlock += "preferences[$key] = $afterInnerElvis"
+                }
             addBlock
         } else "preferences[${preferenceKeyPropertyName[0]}] = $afterElvis"
 
@@ -89,7 +89,7 @@ internal class DsFunctionsGenerator {
             addModifiers(KModifier.SUSPEND)
             addParameter(
                 name = functionParameterName,
-                type =  if (isStringSet) {
+                type = if (isStringSet) {
                     functionParamType.toClassName().parameterizedBy(String::class.asClassName())
                 } else functionParamType.toClassName()
             )
@@ -103,7 +103,10 @@ internal class DsFunctionsGenerator {
         preferenceKeyPropertyName: List<String>,
         parameterName: String
     ): FunSpec {
-        val paramType = functionParameterType.toClassName()
+        val isStringSet = functionParameterType.isStringSet
+        val paramType = if (isStringSet) {
+            functionParameterType.toClassName().parameterizedBy(String::class.asClassName())
+        } else functionParameterType.toClassName()
 
         val mapBlock = if (!functionParameterType.isDataClass) {
             if (functionParameterType.isEnumClass) {
@@ -140,7 +143,9 @@ internal class DsFunctionsGenerator {
             name = functionName
         ).apply {
             addModifiers(KModifier.OVERRIDE)
-            addParameter(parameterName, paramType)
+            addParameter(
+                name = parameterName, type = paramType
+            )
             returns(Flow::class.asClassName().parameterizedBy(paramType))
             addCode(codeBlock)
         }.build()
@@ -155,7 +160,8 @@ internal class DsFunctionsGenerator {
             val dataStoreKeyType = ksType.toDataStoreKey().parameterizedBy(
                 when {
                     ksType.isEnumClass -> String::class.asClassName()
-                    ksType.isStringSet -> Set::class.asClassName().parameterizedBy(String::class.asClassName())
+                    ksType.isStringSet -> Set::class.asClassName()
+                        .parameterizedBy(String::class.asClassName())
                     else -> ksType.toClassName()
                 }
             )
@@ -168,7 +174,7 @@ internal class DsFunctionsGenerator {
 
             return PropertySpec.builder(
                 name = propertyName,
-                type =  dataStoreKeyType
+                type = dataStoreKeyType
             ).apply {
                 addModifiers(KModifier.PRIVATE)
                 initializer(CodeBlock.of(codeBlock))
