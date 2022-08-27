@@ -6,12 +6,14 @@
 
 package kasem.sm.easystore.processor.ksp
 
+import com.google.devtools.ksp.innerArguments
 import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Modifier
+import com.squareup.kotlinpoet.asClassName
 import com.squareup.kotlinpoet.ksp.toClassName
 
 internal fun KSFunctionDeclaration.checkIfReturnTypeExists(logger: KSPLogger) {
@@ -34,4 +36,5 @@ internal val KSType.isEnumClass get() = declaration.modifiers.firstOrNull() == M
 
 internal val KSType.isDataClass get() = declaration.modifiers.firstOrNull() == Modifier.DATA
 
-internal val KSType.isStringSet get() = toClassName().simpleName == "Set"
+internal val KSType.isStringSet get() = toClassName().simpleName == "Set" &&
+        innerArguments.firstOrNull()?.type?.resolve()?.toClassName() == String::class.asClassName()

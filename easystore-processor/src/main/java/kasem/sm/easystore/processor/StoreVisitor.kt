@@ -23,6 +23,7 @@ import kasem.sm.easystore.processor.generator.DsFactoryClassGenerator
 import kasem.sm.easystore.processor.ksp.checkIfReturnTypeExists
 import kasem.sm.easystore.processor.ksp.isDataClass
 import kasem.sm.easystore.processor.ksp.isEnumClass
+import kasem.sm.easystore.processor.ksp.isStringSet
 import kasem.sm.easystore.processor.ksp.supportedTypes
 
 class StoreVisitor(
@@ -112,7 +113,7 @@ class StoreVisitor(
                 supportedTypes.find { type -> parameter.toClassName() == type } != null -> false
                 parameter.isEnumClass -> false
                 parameter.isDataClass -> false
-                parameter.innerArguments.firstOrNull()?.type?.resolve()?.toClassName() == String::class.asClassName() -> false
+                parameter.isStringSet -> false
                 else -> {
                     true
                 }
