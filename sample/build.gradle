@@ -1,16 +1,16 @@
 plugins {
 	id 'com.android.application'
 	id 'org.jetbrains.kotlin.android'
-	id 'com.google.devtools.ksp' version "1.7.10-1.0.6"
+	id 'com.google.devtools.ksp' version "1.8.10-1.0.9"
 }
 
 android {
-	compileSdk 32
+	compileSdk 33
 
 	defaultConfig {
 		applicationId "kasem.sm.easystore.sample"
 		minSdk 21
-		targetSdk 32
+		targetSdk 33
 		versionCode 1
 		versionName "1.0"
 
@@ -36,14 +36,14 @@ android {
 }
 
 dependencies {
-	implementation 'androidx.core:core-ktx:1.8.0'
-	implementation 'androidx.appcompat:appcompat:1.5.0'
-	implementation 'com.google.android.material:material:1.6.1'
+	implementation 'androidx.core:core-ktx:1.9.0'
+	implementation 'androidx.appcompat:appcompat:1.6.0'
+	implementation 'com.google.android.material:material:1.8.0'
 
 	implementation "androidx.datastore:datastore-preferences:1.0.0"
 	implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
 
-	implementation "androidx.activity:activity-ktx:1.5.1"
+	implementation "androidx.activity:activity-ktx:1.6.1"
 
 	implementation(project(":easystore-core"))
 	ksp(project(":easystore-processor"))

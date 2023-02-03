@@ -31,11 +31,23 @@ interface AppPreferences {
     // Automatic Enum mapping (Also supports Data Class)
     @Retrieve(preferenceKeyName = "app_theme")
     fun getAppTheme(default: Theme): Flow<Theme>
+
+    @Store(preferenceKeyName = "user")
+    suspend fun updateUser(user: User)
+
+    @Retrieve(preferenceKeyName = "user")
+    fun getCurrentUser(default: User): Flow<User>
 }
 
 enum class Theme {
     DARK, LIGHT, SYSTEM
 }
+
+data class User(
+    val id: Int,
+    val username: String,
+    val loginTime: Long
+)
 
 // Single Instance of DataStore
 private val Context.dataStore: DataStore<Preferences>

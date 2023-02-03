@@ -1,6 +1,6 @@
 plugins {
     kotlin("jvm")
-    id("com.google.devtools.ksp") version "1.7.10-1.0.6"
+    id("com.google.devtools.ksp") version "1.8.10-1.0.9"
 }
 
 sourceSets.main {
@@ -15,7 +15,7 @@ dependencies {
     implementation(project(":easystore-core"))
 
     implementation("androidx.datastore:datastore-preferences-core:1.0.0")
-    implementation("com.google.devtools.ksp:symbol-processing-api:1.7.10-1.0.6")
+    implementation("com.google.devtools.ksp:symbol-processing-api:1.8.10-1.0.9")
     
     implementation("com.squareup:kotlinpoet:1.12.0")
     implementation("com.squareup:kotlinpoet-ksp:1.12.0")

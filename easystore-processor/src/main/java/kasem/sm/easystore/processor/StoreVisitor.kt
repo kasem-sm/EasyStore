@@ -156,7 +156,7 @@ class StoreVisitor(
             // Retrieve
             if (functionReturnType == null || functionReturnType.toClassName().simpleName != "Flow") {
                 logger.error(
-                    "Functions annotated with @Retrieve should return Flow<PARAM_TYPE>. " +
+                    "Functions annotated with @Retrieve should return Flow<T>. " +
                             "($functionName)"
                 )
                 return
@@ -168,7 +168,7 @@ class StoreVisitor(
 
                 if (innerType.toClassName().simpleName != parameter.toClassName().simpleName
                 ) {
-                    logger.error("The return type for the function $functionName should be Flow<${parameter.toClassName().simpleName}> as the parameter type is ${parameter.toClassName().simpleName}.")
+                    logger.error("The return type for the function $functionName should be Flow<${parameter.toClassName().simpleName}> as the parameter type is ${parameter.toClassName().simpleName} or update the function's parameter type to ${innerType.toClassName().simpleName}")
                     return
                 }
 
